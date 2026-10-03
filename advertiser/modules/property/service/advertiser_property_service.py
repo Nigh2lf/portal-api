@@ -80,12 +80,14 @@ class AdvertiserPropertyService(PropertyService):
     def _validate_rules(self, data, instance=None):
         """Código único por anunciante e limites de imóveis ativos/destaques do plano."""
         errors = {}
-        others = Property.objects.filter(advertiser=self.advertiser, deleted_at__isnull=True)
+        same_advertiser = Property.objects.filter(advertiser=self.advertiser)
         if instance is not None:
-            others = others.exclude(pk=instance.pk)
+            same_advertiser = same_advertiser.exclude(pk=instance.pk)
+        others = same_advertiser.filter(deleted_at__isnull=True)
 
+        # A unicidade do código no banco inclui imóveis excluídos (soft delete).
         reference_code = data.get("reference_code")
-        if reference_code and others.filter(reference_code__iexact=reference_code).exists():
+        if reference_code and same_advertiser.filter(reference_code__iexact=reference_code).exists():
             errors["reference_code"] = [_("Já existe um imóvel com este código.")]
 
         def merged(field, default):

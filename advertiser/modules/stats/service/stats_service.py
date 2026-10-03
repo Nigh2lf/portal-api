@@ -103,9 +103,12 @@ class AdvertiserStatsService:
         """Agrupa os eventos por imóvel (id ou, para imóveis apagados, o código) e ordena por visualizações."""
         rows = {}
 
-        def row_for(event):
+        def add(event, field):
+            # Eventos sem imóvel (ex.: clique no contato do hotsite) entram só nos totais.
             key = event["property_id"] or event["property_reference_code"]
-            return rows.setdefault(
+            if not key:
+                return
+            row = rows.setdefault(
                 key,
                 {
                     "property": event["property_id"],
@@ -118,15 +121,15 @@ class AdvertiserStatsService:
                     "inquiries": 0,
                 },
             )
+            row[field] += event["total"]
 
         group = ("property_id", "property_reference_code")
         for event in views_qs.values(*group).annotate(total=Count("id")):
-            row_for(event)["views"] += event["total"]
+            add(event, "views")
         for event in clicks_qs.values(*group, "channel").annotate(total=Count("id")):
-            field = "phone_clicks" if event["channel"] == ContactChannel.PHONE else "whatsapp_clicks"
-            row_for(event)[field] += event["total"]
+            add(event, "phone_clicks" if event["channel"] == ContactChannel.PHONE else "whatsapp_clicks")
         for event in inquiries_qs.values(*group).annotate(total=Count("id")):
-            row_for(event)["inquiries"] += event["total"]
+            add(event, "inquiries")
 
         property_ids = [key for key, row in rows.items() if row["property"]]
         if property_ids:
