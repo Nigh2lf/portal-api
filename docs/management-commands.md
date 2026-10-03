@@ -81,6 +81,18 @@ python manage.py seedpermissions
 
 Depois, associe `Permission`s a `Profile`s no Django Admin.
 
+## `seed_advertiser_profile`
+
+Cria `Menu` + 4 `Permission` (READ/CREATE/UPDATE/DELETE) para cada `view_name` do app
+[advertiser](../advertiser/README.md) (`advertiser_me`, `advertiser_property`,
+`advertiser_inquiry`, `advertiser_property_request`, `advertiser_stats`,
+`advertiser_import`) e os vincula ao perfil `ANUNCIANTE`. Essas views têm router
+próprio e não aparecem no `seedpermissions`.
+
+```bash
+python manage.py seed_advertiser_profile   # idempotente
+```
+
 ## Comandos nativos úteis
 
 | Comando | Quando |

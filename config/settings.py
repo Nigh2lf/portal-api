@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     "django_otp.plugins.otp_static",
     "core",
     "public",
+    "advertiser",
 ]
 
 # MFA no Django Admin (django-otp). Quando True, /admin/ usa OTPAdminSite e

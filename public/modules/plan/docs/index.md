@@ -15,7 +15,7 @@ e nenhum depende do portal (planos e espaços são globais).
 
 ## GET /api/v1/public/plans/
 
-`data[]`: `id`, `slug`, `name`, `monthly_price` (decimal como string, `null` =
+`data[]`: `id`, `slug`, `name`, `monthly_price` (número decimal, `null` =
 "sob consulta"), `property_limit`, `photo_limit`, `featured_limit`,
 `has_realtor_page`, `receives_property_requests`, `has_hotsite`,
 `is_recommended`, `is_owner_only` (só aparece na escolha "proprietário"),
@@ -27,6 +27,6 @@ Sem query params e sem erros além do throttle (`429`).
 
 `data[]`: `code` (ex.: `PH1`), `name`, `page` (`HOME` | `SEARCH` |
 `PROPERTY`), `kind` (`POPUP` | `HORIZONTAL` | `SIDEBAR`), `width`, `height`
-(pixels), `monthly_price` (decimal como string ou `null`), `notes`.
+(pixels), `monthly_price` (número decimal ou `null`), `notes`.
 
 Sem query params e sem erros além do throttle (`429`).
