@@ -19,6 +19,7 @@ Este projeto tem padrões fortes. Reusar > recriar. Sempre.
 | Comando management | `core/management/commands/` | Ver `createuser.py` como template |
 | Envio de e-mail | `core/services/services_emails.py` | Não chame SMTP direto. Use Noclaf API |
 | Consulta CEP / API externa | `core/views/cep.py` | Throttle `ScopedRateThrottle` + scope dedicado |
+| Endpoint **público do site** (`AllowAny`, consumido pelo portal-web) | app `public/` ([public/README.md](public/README.md)) | `public/modules/<modulo>/`, rota em `public/urls.py`, throttle `public`; nunca em `core/modules/` |
 | Resposta de API | `core/classes/base_viewset.py::_response_format` | Envelope `{success, status, message, data, error}` |
 | Exception handler | `core/classes/exception_handler.py` | Já configurado. Só levantar `ValidationError`, `PermissionDenied`, etc. |
 | Job em background (cron) | `core/cron/jobs.py` + `core/cron/scheduler.py` | Adicione função em `jobs.py` e registre em `scheduler.start()` com `id=` + `replace_existing=True`. Ligado por `RUN_CRON=true` |

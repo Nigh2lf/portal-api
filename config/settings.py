@@ -90,6 +90,7 @@ INSTALLED_APPS = [
     "django_otp.plugins.otp_totp",
     "django_otp.plugins.otp_static",
     "core",
+    "public",
 ]
 
 # MFA no Django Admin (django-otp). Quando True, /admin/ usa OTPAdminSite e
@@ -141,6 +142,7 @@ REST_FRAMEWORK = {
         "login": os.getenv("THROTTLE_LOGIN", "15/min"),
         "forgot_password": os.getenv("THROTTLE_FORGOT", "5/hour"),
         "cep": os.getenv("THROTTLE_CEP", "60/hour"),
+        "public": os.getenv("THROTTLE_PUBLIC", "600/min"),
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "core.classes.exception_handler.envelope_exception_handler",

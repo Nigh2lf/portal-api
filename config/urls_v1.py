@@ -79,6 +79,7 @@ router.register(r"scheduled-task-runs", ScheduledTaskRunViewSet, basename="sched
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("public/", include("public.urls")),
     path("health/", HealthCheckView.as_view(), name="health"),
     path("cep/<str:cep>/", CepLookupView.as_view(), name="cep-lookup"),
     path("auth/login/", ViewTokenObtainPair.as_view(), name="token_obtain_pair"),
