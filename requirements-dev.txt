@@ -1,0 +1,21 @@
+# Dependências de DESENVOLVIMENTO (não vão para produção).
+# Instale com:  pip install -r requirements-dev.txt
+#
+# Inclui o que está em requirements.txt + ferramentas de qualidade,
+# pre-commit, e libs auxiliares para rodar testes/lint localmente.
+-r requirements.txt
+
+# --- Test runner -------------------------------------------------------------
+pytest==8.3.3
+pytest-django==4.9.0
+pytest-mock==3.14.0
+
+# --- Hooks de commit ---------------------------------------------------------
+pre-commit==4.0.1
+
+# --- Lint / format / segurança (também usados pelos hooks) ------------------
+ruff==0.6.9
+bandit[toml]==1.7.10
+detect-secrets==1.5.0
+django-upgrade==1.21.0
+pyupgrade==3.17.0
