@@ -65,14 +65,21 @@ class PublicPropertyViewSet(BaseViewSet):
 
     def retrieve(self, request, portal_slug=None, slug=None):
         """
-        Detalhe do imóvel (por slug ou código) com anunciante, relacionados e links
+        Detalhe do imóvel (por slug ou código) com anunciante, relacionados e links (`?related=0` omite os relacionados)
 
         Returns:
             envelope com `{property, related, related_links}`; 404 se não visível no portal
         """
         portal = self.get_portal()
         chave = (slug or "").lower()
-        r = cached("listing", lambda: self._detail_payload(portal, slug), portal=portal.slug, item=chave, params={"view": "detail"})
+        com_relacionados = request.query_params.get("related", "1") != "0"
+        r = cached(
+            "listing",
+            lambda: self._detail_payload(portal, slug, com_relacionados),
+            portal=portal.slug,
+            item=chave,
+            params={"view": "detail", "related": com_relacionados},
+        )
         if request.query_params.get("track", "1") != "0":
             defer(
                 PropertyView.objects.create,
@@ -86,23 +93,29 @@ class PublicPropertyViewSet(BaseViewSet):
             )
         return envelope_success(data=r["data"])
 
-    def _detail_payload(self, portal, slug):
+    def _visible_property(self, portal, slug, queryset=None):
+        qs = queryset if queryset is not None else visible_properties(portal)
+        prop = qs.filter(Q(slug=slug) | Q(reference_code__iexact=slug)).first()
+        if prop is None:
+            raise NotFound("Imóvel não encontrado.")
+        return prop
+
+    def _detail_payload(self, portal, slug, com_relacionados=True):
         """
         Monta o detalhe do imóvel e os dados mínimos para registrar a visualização
 
         Args:
             portal: portal da requisição
             slug: slug ou código do imóvel
+            com_relacionados: calcula os imóveis relacionados (o site busca à parte)
 
         Returns:
             ``{"data": {property, related, related_links}, "track": {property_id, reference_code, advertiser_id}}``
         """
         qs = with_card_data(visible_properties(portal)).select_related("advertiser", "advertiser__portal").prefetch_related("fees")
-        prop = qs.filter(Q(slug=slug) | Q(reference_code__iexact=slug)).first()
-        if prop is None:
-            raise NotFound("Imóvel não encontrado.")
+        prop = self._visible_property(portal, slug, qs)
         self._annotate_advertiser_totals(prop.advertiser, portal)
-        related = SearchService(portal).related(prop)
+        related = SearchService(portal).related(prop) if com_relacionados else []
         ctx = {"request": self.request}
         return {
             "data": {
@@ -112,6 +125,24 @@ class PublicPropertyViewSet(BaseViewSet):
             },
             "track": {"property_id": prop.pk, "reference_code": prop.reference_code, "advertiser_id": prop.advertiser_id},
         }
+
+    @action(detail=True, methods=["get"], url_path="related")
+    def related(self, request, portal_slug=None, slug=None):
+        """
+        Imóveis relacionados ao informado (mesmo tipo e cidade, preço mais próximo)
+
+        Returns:
+            envelope com até 6 cards; 404 se o imóvel não estiver visível no portal
+        """
+        portal = self.get_portal()
+
+        def montar():
+            prop = self._visible_property(portal, slug)
+            itens = SearchService(portal).related(prop)
+            return PublicPropertyCardSerializer(itens, many=True, context={"request": request}).data
+
+        dados = cached("listing", montar, portal=portal.slug, item=(slug or "").lower(), params={"view": "related"})
+        return envelope_success(data=dados)
 
     @action(detail=False, methods=["get"], url_path="by-ids")
     def by_ids(self, request, portal_slug=None):

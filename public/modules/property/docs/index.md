@@ -81,3 +81,12 @@ Base: `/api/v1/public/portals/{portal_slug}/advertisers/`
 
 Campos: os mesmos de `data.property.advertiser` acima. Para listar os
 imóveis do hotsite use a busca com `advertiser={slug}`.
+
+## GET /api/v1/public/portals/{portal_slug}/properties/{slug}/related/
+
+Imóveis relacionados (mesmo tipo e cidade, preço mais próximo no mesmo
+objetivo), até 6. Aceita slug ou código. `data`: lista de cards (mesmo formato
+de `featured-properties`). `404` se o imóvel não estiver visível no portal.
+
+O detalhe aceita `?related=0` para não calcular os relacionados; o site usa
+essa opção e busca esta rota à parte, para a página aparecer antes.
