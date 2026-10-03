@@ -13,6 +13,7 @@ from core.modules.integrator.view import IntegratorViewSet
 from core.modules.neighborhood.view import NeighborhoodViewSet
 from core.modules.plan.view import PlanViewSet
 from core.modules.portal.view import PortalViewSet
+from core.modules.portal_menu_item.view import PortalMenuItemViewSet
 from core.modules.profile.view import ProfileViewSet
 from core.modules.property.view import PropertyViewSet
 from core.modules.property_inquiry.view import PropertyInquiryViewSet
@@ -41,6 +42,7 @@ __all__ = [
     "IntegratorViewSet",
     "NeighborhoodViewSet",
     "PlanViewSet",
+    "PortalMenuItemViewSet",
     "PortalViewSet",
     "ProfileViewSet",
     "PropertyInquiryViewSet",

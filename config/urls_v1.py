@@ -26,6 +26,7 @@ from core.views import (
     IntegratorViewSet,
     NeighborhoodViewSet,
     PlanViewSet,
+    PortalMenuItemViewSet,
     PortalViewSet,
     ProfileViewSet,
     PropertyInquiryViewSet,
@@ -53,6 +54,7 @@ router.register(r"public-assets", PublicAssetViewSet, basename="public-asset")
 router.register(r"states", StateViewSet, basename="state")
 router.register(r"cities", CityViewSet, basename="city")
 router.register(r"neighborhoods", NeighborhoodViewSet, basename="neighborhood")
+router.register(r"portal-menu-items", PortalMenuItemViewSet, basename="portal-menu-item")
 router.register(r"portals", PortalViewSet, basename="portal")
 router.register(r"banners", BannerViewSet, basename="banner")
 router.register(r"plans", PlanViewSet, basename="plan")
