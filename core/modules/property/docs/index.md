@@ -22,13 +22,13 @@ Só imóveis não excluídos (`deleted_at IS NULL`).
 Query params: `search` (`reference_code`, `title`, `description`),
 `advertiser` (UUID), `advertiser__portal` (UUID), `property_type` (UUID),
 `city` (UUID), `neighborhood` (UUID), `status` (`DRAFT` | `PUBLISHED`),
-`is_active`, `is_featured`, `ordering` (`reference_code`, `title`, `status`,
-`is_featured`, `sale_price`, `rent_price`, `seasonal_rent_price`,
-`created_at`, `updated_at`; default `-is_featured,-updated_at`), `page`,
+`is_active`, `ad_type` (`NORMAL` | `FEATURED` | `SUPER_FEATURED`; superdestaque vem antes de destaque na ordenação), `ordering` (`reference_code`, `title`, `status`,
+`ad_type`, `sale_price`, `rent_price`, `seasonal_rent_price`,
+`created_at`, `updated_at`; default `-updated_at`), `page`,
 `page_size`.
 
 `data.results[]`: `id`, `reference_code`, `title`, `slug`, `status`,
-`is_active`, `is_featured`, `advertiser` (UUID), `advertiser_name`,
+`is_active`, `ad_type`, `advertiser` (UUID), `advertiser_name`,
 `property_type` (UUID), `property_type_name`, `city` (UUID), `city_name`,
 `neighborhood` (UUID ou `null`), `neighborhood_name` (nome do bairro
 vinculado ou o texto livre de "outro bairro"; `null` se nenhum), `sale_price`,
@@ -40,7 +40,7 @@ fotos), `updated_at`.
 
 `data`: `id`, `advertiser`, `advertiser_name`, `advertiser_portal` (UUID do
 portal do anunciante), `reference_code`, `slug`, `title`, `status`,
-`is_active`, `is_featured`, `property_type`, `property_type_name`, `city`,
+`is_active`, `ad_type`, `property_type`, `property_type_name`, `city`,
 `city_name`, `state_code`, `neighborhood`, `neighborhood_name` (exibição, com
 fallback), `custom_neighborhood_name` (texto livre "outro bairro"),
 `is_in_condominium`, `bedrooms`, `suites`, `bathrooms`, `parking_spaces`,
@@ -57,8 +57,8 @@ Obrigatórios: `advertiser` (UUID), `reference_code` (único por anunciante),
 `property_type` (UUID), `city` (UUID).
 
 Opcionais: `title` (gerado quando ausente), `slug` (gerado quando ausente;
-único), `status` (`PUBLISHED`), `is_active` (`true`), `is_featured`
-(`false`), `neighborhood` (UUID), `custom_neighborhood_name` (texto livre
+único), `status` (`PUBLISHED`), `is_active` (`true`), `ad_type`
+(`NORMAL`), `neighborhood` (UUID), `custom_neighborhood_name` (texto livre
 quando o bairro não existe no cadastro), `is_in_condominium`, `bedrooms`,
 `suites`, `bathrooms`, `parking_spaces` (inteiros, default 0), `built_area`,
 `total_area`, `description`, `sale_price`, `rent_price`,

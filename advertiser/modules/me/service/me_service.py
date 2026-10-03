@@ -61,5 +61,5 @@ class MeService:
         """
         return Property.objects.filter(advertiser=self.advertiser, deleted_at__isnull=True).aggregate(
             properties_used=Count("id", filter=Q(is_active=True)),
-            featured_used=Count("id", filter=Q(is_active=True, is_featured=True)),
+            featured_used=Count("id", filter=Q(is_active=True) & ~Q(ad_type="NORMAL")),
         )

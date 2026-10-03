@@ -24,7 +24,7 @@ cadastro de anunciante.".
 ## Objeto completo (listagem, detalhe e resposta de escrita)
 
 `id`, `reference_code`, `slug`, `title`, `status` (`DRAFT` | `PUBLISHED`),
-`is_active`, `is_featured`, `property_type` (`{id, name, slug}`), `city`
+`is_active`, `ad_type` (`NORMAL` | `FEATURED` | `SUPER_FEATURED`; superdestaque vem antes de destaque na ordenação), `property_type` (`{id, name, slug}`), `city`
 (`{id, name, slug, state_code}`), `neighborhood` (`{id, name, slug}` ou
 `null`), `custom_neighborhood_name` (texto livre de "outro bairro"),
 `is_in_condominium`, `bedrooms`, `suites`, `bathrooms`, `parking_spaces`,
@@ -46,7 +46,7 @@ Query params: `search` (`reference_code`, `title`, `description`), `purpose`
 (`SALE` | `RENT` | `SEASONAL`: imóveis com o preço correspondente preenchido),
 `property_type` (slug), `city` (slug), `neighborhood` (slug), `status`
 (`active` = ativo e publicado; `inactive` = `is_active=false`; `draft` =
-`status=DRAFT`), `ordering` (`reference_code`, `title`, `is_featured`,
+`status=DRAFT`), `ordering` (`reference_code`, `title`, `ad_type`,
 `sale_price`, `rent_price`, `seasonal_rent_price`, `created_at`,
 `updated_at`; default `-updated_at`), `page`, `page_size`.
 
@@ -63,7 +63,7 @@ características e taxas; `views_count` por `annotate`).
 Obrigatórios: `reference_code` (único por anunciante), `property_type` (UUID),
 `city` (UUID) e ao menos um preço.
 
-Opcionais: `is_active` (`true`), `is_featured` (`false`), `neighborhood`
+Opcionais: `is_active` (`true`), `ad_type` (`NORMAL`), `neighborhood`
 (UUID ou `null`), `custom_neighborhood_name`, `is_in_condominium`, `bedrooms`,
 `suites`, `bathrooms`, `parking_spaces` (inteiros, default 0), `built_area`,
 `total_area`, `sale_price`, `rent_price`, `seasonal_rent_price`, `fees`
@@ -80,7 +80,7 @@ Erros `400` por campo:
 - `reference_code`: "Já existe um imóvel com este código."
 - `is_active`: "Seu plano permite N imóveis ativos." (ativos já no limite
   efetivo do plano/anunciante)
-- `is_featured`: "Seu plano permite N imóveis em destaque."
+- `ad_type`: "Seu plano permite N imóveis em destaque."
 
 ## PUT/PATCH /api/v1/advertiser/properties/{id}/
 

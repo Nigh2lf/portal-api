@@ -155,7 +155,7 @@ class SearchService:
             has_photo=Case(When(photos_count__gt=0, then=Value(1)), default=Value(0), output_field=IntegerField()),
         )
         order = ORDERINGS[filters.ordering]
-        qs = qs.order_by("-is_featured", "-has_photo", order, "-updated_at")
+        qs = qs.annotate(ad_rank=Property.ad_rank_expression()).order_by("-ad_rank", "-has_photo", order, "-updated_at")
 
         total = qs.count()
         total_pages = max(1, -(-total // filters.page_size))

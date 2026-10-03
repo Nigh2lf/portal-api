@@ -102,13 +102,13 @@ class AdvertiserPropertyService(PropertyService):
                     _("Seu plano permite %(limit)d imóveis ativos.") % {"limit": limit}
                 ]
 
-        becomes_featured = merged("is_featured", False) and not (
+        becomes_featured = merged("ad_type", "NORMAL") != "NORMAL" and not (
             instance and instance.is_featured
         )
         if becomes_featured:
             limit = self.advertiser.effective_featured_limit
-            if others.filter(is_active=True, is_featured=True).count() >= limit:
-                errors["is_featured"] = [
+            if others.filter(is_active=True).exclude(ad_type="NORMAL").count() >= limit:
+                errors["ad_type"] = [
                     _("Seu plano permite %(limit)d imóveis em destaque.") % {"limit": limit}
                 ]
 

@@ -35,20 +35,20 @@ class PropertyViewSet(BaseModelViewSet):
         "neighborhood",
         "status",
         "is_active",
-        "is_featured",
+        "ad_type",
     ]
     ordering_fields = [
         "reference_code",
         "title",
         "status",
-        "is_featured",
+        "ad_type",
         "sale_price",
         "rent_price",
         "seasonal_rent_price",
         "created_at",
         "updated_at",
     ]
-    ordering = ("-is_featured", "-updated_at")
+    ordering = ("-updated_at",)
 
     def get_serializer_class(self):
         if self.action == "list":

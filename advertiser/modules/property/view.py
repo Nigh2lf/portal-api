@@ -44,7 +44,7 @@ class AdvertiserPropertyViewSet(CurrentAdvertiserMixin, BaseModelViewSet):
     ordering_fields = [
         "reference_code",
         "title",
-        "is_featured",
+        "ad_type",
         "sale_price",
         "rent_price",
         "seasonal_rent_price",

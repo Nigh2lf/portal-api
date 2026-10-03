@@ -601,7 +601,8 @@ class Command(BaseCommand):
             prop.reference_code = (r["ApelidoImovel"] or str(r["Id_Imovel"])).strip()[:45]
             prop.status = Property.Status.PUBLISHED
             prop.is_active = to_bool(r["Ativo"])
-            prop.is_featured = to_bool(r["Destaque"])
+            destaque = to_int(r["Destaque"])
+            prop.ad_type = Property.AdType.SUPER_FEATURED if destaque >= 2 else Property.AdType.FEATURED if destaque == 1 else Property.AdType.NORMAL
             prop.property_type = tipo
             prop.city = city
             prop.neighborhood = bairro

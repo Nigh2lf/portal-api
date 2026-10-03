@@ -40,7 +40,7 @@ Erros `400` em `purpose`, `condominium`, `ordering`, `page`, `page_size`,
 
 Registra `PropertyView` (salvo `?track=0`).
 
-`data.property`: `id`, `reference_code`, `slug`, `title`, `is_featured`,
+`data.property`: `id`, `reference_code`, `slug`, `title`, `ad_type` (`NORMAL` | `FEATURED` | `SUPER_FEATURED`; superdestaque vem antes de destaque na ordenação),
 `property_type` (`{id, name, slug}`), `city` (`{id, name, slug, state_code}`),
 `neighborhood` (`{id, name, slug}` ou `null`), `neighborhood_name`,
 `state_code`, `is_in_condominium`, `bedrooms`, `suites`, `bathrooms`,

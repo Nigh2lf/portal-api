@@ -790,13 +790,18 @@ class Property(LegacyIdMixin, SoftDeleteMixin, AbstractModel):
         DRAFT = "DRAFT", "Rascunho"
         PUBLISHED = "PUBLISHED", "Publicado"
 
+    class AdType(models.TextChoices):
+        NORMAL = "NORMAL", "Normal"
+        FEATURED = "FEATURED", "Destaque"
+        SUPER_FEATURED = "SUPER_FEATURED", "Superdestaque"
+
     advertiser = models.ForeignKey("core.Advertiser", on_delete=models.CASCADE, related_name="properties")
     reference_code = models.CharField(max_length=45)
     slug = models.SlugField(max_length=220, unique=True)
     title = models.CharField(max_length=200, blank=True, default="")
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PUBLISHED)
     is_active = models.BooleanField(default=True)
-    is_featured = models.BooleanField(default=False)
+    ad_type = models.CharField(max_length=16, choices=AdType.choices, default=AdType.NORMAL, db_index=True, help_text="Legado: Destaque 0/1/2.")
 
     property_type = models.ForeignKey(PropertyType, on_delete=models.PROTECT, related_name="properties")
     city = models.ForeignKey("core.City", on_delete=models.PROTECT, related_name="properties")
@@ -825,7 +830,7 @@ class Property(LegacyIdMixin, SoftDeleteMixin, AbstractModel):
     class Meta(AbstractModel.Meta):
         app_label = "core"
         verbose_name_plural = "properties"
-        ordering = ("-is_featured", "-updated_at")
+        ordering = ("-updated_at",)
         unique_together = ("advertiser", "reference_code")
         indexes = [
             models.Index(fields=["is_active", "status"]),
@@ -838,6 +843,23 @@ class Property(LegacyIdMixin, SoftDeleteMixin, AbstractModel):
 
     def __str__(self):
         return f"{self.reference_code} - {self.title}"
+
+    @builtins.property
+    def is_featured(self):
+        """Destaque ou superdestaque (conta no limite de destaques do plano)."""
+        return self.ad_type != self.AdType.NORMAL
+
+    @staticmethod
+    def ad_rank_expression():
+        """Expressão para ordenar superdestaque > destaque > normal em querysets."""
+        from django.db.models import Case, IntegerField, Value, When
+
+        return Case(
+            When(ad_type="SUPER_FEATURED", then=Value(2)),
+            When(ad_type="FEATURED", then=Value(1)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
 
 
 def property_photo_path(instance, filename):

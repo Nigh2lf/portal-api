@@ -42,7 +42,7 @@ sort_order}`, só ativos), `total_properties`.
 ## GET .../featured-properties/
 
 `data[]` (card de imóvel): `id`, `reference_code`, `slug`, `title`,
-`is_featured`, `property_type_name`, `property_type_slug`, `city_name`,
+`ad_type` (`NORMAL` | `FEATURED` | `SUPER_FEATURED`; superdestaque vem antes de destaque na ordenação), `property_type_name`, `property_type_slug`, `city_name`,
 `city_slug`, `state_code`, `neighborhood_name`, `neighborhood_slug`,
 `bedrooms`, `suites`, `bathrooms`, `parking_spaces`, `built_area`,
 `total_area`, `sale_price`, `rent_price`, `seasonal_rent_price`,

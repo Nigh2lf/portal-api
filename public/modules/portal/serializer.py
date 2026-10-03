@@ -125,7 +125,7 @@ class PublicPropertyCardSerializer(serializers.ModelSerializer):
             "reference_code",
             "slug",
             "title",
-            "is_featured",
+            "ad_type",
             "property_type_name",
             "property_type_slug",
             "city_name",

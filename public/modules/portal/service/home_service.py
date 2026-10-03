@@ -54,7 +54,11 @@ class HomeService:
 
     def featured(self, limit=12):
         """Destaques do portal; completa com os mais recentes quando há menos que o limite."""
-        destaques = list(self.cards_queryset(self.scope().filter(is_featured=True)).order_by("-updated_at")[:limit])
+        destaques = list(
+            self.cards_queryset(self.scope().exclude(ad_type=Property.AdType.NORMAL))
+            .annotate(ad_rank=Property.ad_rank_expression())
+            .order_by("-ad_rank", "-updated_at")[:limit]
+        )
         if len(destaques) < limit:
             ids = [p.pk for p in destaques]
             extra = self.cards_queryset(self.scope().exclude(pk__in=ids)).order_by("-updated_at")[: limit - len(destaques)]

@@ -87,7 +87,7 @@ class PublicPropertyDetailSerializer(serializers.ModelSerializer):
             "reference_code",
             "slug",
             "title",
-            "is_featured",
+            "ad_type",
             "property_type",
             "city",
             "neighborhood",
