@@ -218,6 +218,17 @@ DATABASES = {
     }
 }
 
+# Banco do portal legado (PHP, MySQL 5.7), somente leitura, usado por `import_legacy`.
+# Não entra em DATABASES porque o Django 4.2 recusa MySQL < 8; o comando conecta
+# direto com MySQLdb usando estas variáveis.
+LEGACY_DB = {
+    "host": os.getenv("DB_PORTAL_ANTIGO_HOST", ""),
+    "port": int(os.getenv("DB_PORTAL_ANTIGO_PORT", "3306") or 3306),
+    "user": os.getenv("DB_PORTAL_ANTIGO_USER", ""),
+    "password": os.getenv("DB_PORTAL_ANTIGO_PASSWORD", ""),
+    "name": os.getenv("DB_PORTAL_ANTIGO_NAME", ""),
+}
+
 
 # Security headers (ativos quando DEBUG=False)
 SECURE_BROWSER_XSS_FILTER = True
@@ -292,7 +303,7 @@ if AWS_STORAGE_BUCKET_NAME:
     # AccessControlListNotSupported. Acesso público é feito via bucket policy.
     AWS_DEFAULT_ACL = None
     AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "sa-east-1")
-    AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3-{AWS_S3_REGION_NAME}.amazonaws.com"
+    AWS_S3_CUSTOM_DOMAIN = f"{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com"
     AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
     AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
     AWS_S3_FILE_OVERWRITE = False

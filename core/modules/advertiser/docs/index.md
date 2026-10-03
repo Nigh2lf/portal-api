@@ -22,7 +22,7 @@ Query params: `search` (`name`, `slug`, `email`, `document`, `contact_name`),
 `is_published`, `created_at`), `page`, `page_size`.
 
 `data.results[]`: `id`, `name`, `slug`, `type`, `email`, `phone`, `plan`
-(UUID), `plan_name`, `portal` (UUID), `portal_name`, `is_published`,
+(UUID), `plan_name`, `portal` (UUID), `portal_name`, `is_published`, `properties_count`,
 `created_at`.
 
 ## GET /api/v1/advertisers/{id}/

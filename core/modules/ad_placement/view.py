@@ -1,3 +1,4 @@
+from django_filters import rest_framework as filters
 from rest_framework.permissions import IsAuthenticated
 
 from core.classes.base_viewset import BaseModelViewSet
@@ -11,13 +12,21 @@ from core.modules.ad_placement.serializer import (
 )
 
 
+class AdPlacementFilter(filters.FilterSet):
+    page_type = filters.ChoiceFilter(field_name="page", choices=AdPlacement.Page.choices)
+
+    class Meta:
+        model = AdPlacement
+        fields = ["page_type", "kind", "is_active"]
+
+
 class AdPlacementViewSet(LookupOptionsMixin, BaseModelViewSet):
     view_name = "ad_placement"
     router_user = ["ADMIN"]
     permission_classes = [IsAuthenticated, CustomPermissionClass]
     serializer_class = AdPlacementSerializer
     search_fields = ["code", "name"]
-    filterset_fields = ["page", "kind", "is_active"]
+    filterset_class = AdPlacementFilter
     ordering_fields = ["code", "name", "page", "kind", "monthly_price", "created_at"]
     ordering = ("code",)
 

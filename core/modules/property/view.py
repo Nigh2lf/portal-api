@@ -151,11 +151,9 @@ class PropertyViewSet(BaseModelViewSet):
         photos = self._service().reorder_photos(prop, serializer.validated_data["ids"])
         return self._photos_response(photos)
 
-    @staticmethod
-    def _photos_response(photos, http_status=status.HTTP_200_OK):
-        return envelope_success(
-            data=PropertyPhotoSerializer(photos, many=True).data, http_status=http_status
-        )
+    def _photos_response(self, photos, http_status=status.HTTP_200_OK):
+        serializer = PropertyPhotoSerializer(photos, many=True, context={"request": self.request})
+        return envelope_success(data=serializer.data, http_status=http_status)
 
     def _service(self) -> PropertyService:
         return PropertyService(user=self.request.user)

@@ -91,3 +91,29 @@ Depois, associe `Permission`s a `Profile`s no Django Admin.
 | `collectstatic --noinput` | Antes de deploy. |
 | `shell` | REPL com Django carregado. |
 | `dbshell` | Cliente do banco. |
+
+## `import_legacy` — importar do portal PHP
+
+Importa catálogos (UF, cidades, bairros, tipos, características, planos,
+integradores), os **portais** e os **imóveis de um anunciante** do banco legado
+para os models novos. Conecta direto no MySQL 5.7 do legado via MySQLdb (variáveis `DB_PORTAL_ANTIGO_*`; o Django 4.2 não aceita MySQL < 8 em `DATABASES`).
+Idempotente: tudo é casado por `legacy_id`; rodar de novo atualiza em vez de
+duplicar.
+
+```bash
+python manage.py import_legacy --client-id 5
+python manage.py import_legacy --client-id 5 --skip-photos   # sem baixar fotos
+python manage.py import_legacy --client-id 5 --limit 10      # teste com 10 imóveis
+python manage.py import_legacy --client-id 5 --password 'Senha@123'
+```
+
+O que faz para o anunciante:
+
+- Cria o `Advertiser` (tipo, plano, contatos, CRECI, limites do plano, logo) e a
+  `AdvertiserIntegration` (URL do XML, integrador).
+- Cria o `User` de login com o e-mail do cliente, `role=USER`, senha informada em
+  `--password` ou gerada (impressa no fim; gravada no padrão MD5-upper do front).
+- Importa os imóveis com título e slug gerados, características (criando as que
+  não existem no catálogo), taxas (IPTU anual, demais mensais) e fotos baixadas
+  das URLs do legado, com miniatura 480x320 e capa marcada.
+- Preserva `updated_at` com a data de atualização do legado.

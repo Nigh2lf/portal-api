@@ -4,6 +4,7 @@ from rest_framework.exceptions import NotFound
 
 from core.models import Property, PropertyFee, PropertyPhoto
 from core.services import SluggedCrudService, unique_slug
+from core.services.images import ensure_cover_thumbnail
 
 PURPOSE_LABELS = (
     ("sale_price", "à venda"),
@@ -109,7 +110,9 @@ class PropertyService(SluggedCrudService):
     # ------------------------------------------------------------------
     def list_photos(self, prop):
         """Fotos do imóvel em ordem de exibição (consulta fresca, sem cache de prefetch)."""
-        return list(PropertyPhoto.objects.filter(property=prop).order_by("sort_order", "created_at"))
+        return list(
+            PropertyPhoto.objects.filter(property=prop).order_by("sort_order", "created_at")
+        )
 
     def add_photos(self, prop, files):
         """
@@ -127,13 +130,15 @@ class PropertyService(SluggedCrudService):
         has_cover = any(photo.is_cover for photo in existing)
 
         for index, file in enumerate(files):
-            PropertyPhoto.objects.create(
+            photo = PropertyPhoto.objects.create(
                 property=prop,
                 image=file,
                 sort_order=next_order + index,
                 is_cover=not has_cover and index == 0,
                 created_by=self.user,
             )
+            if photo.is_cover:
+                ensure_cover_thumbnail(photo)
         return self.list_photos(prop)
 
     def remove_photo(self, prop, photo_id):
@@ -149,7 +154,8 @@ class PropertyService(SluggedCrudService):
         """
         photo = self._get_photo(prop, photo_id)
         was_cover = photo.is_cover
-        photo.image.delete(save=False)
+        if photo.image:
+            photo.image.delete(save=False)
         if photo.thumbnail:
             photo.thumbnail.delete(save=False)
         photo.delete()
@@ -158,6 +164,7 @@ class PropertyService(SluggedCrudService):
         if was_cover and remaining:
             remaining[0].is_cover = True
             remaining[0].save(update_fields=["is_cover", "updated_at"])
+            ensure_cover_thumbnail(remaining[0])
         return remaining
 
     def set_cover(self, prop, photo_id):
@@ -176,6 +183,7 @@ class PropertyService(SluggedCrudService):
         photo.is_cover = True
         photo.updated_by = self.user
         photo.save(update_fields=["is_cover", "updated_by", "updated_at"])
+        ensure_cover_thumbnail(photo)
         return self.list_photos(prop)
 
     def reorder_photos(self, prop, ids):

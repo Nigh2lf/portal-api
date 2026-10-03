@@ -31,20 +31,20 @@ class AdvertiserViewSet(LookupOptionsMixin, BaseModelViewSet):
         return AdvertiserSerializer
 
     def get_queryset(self):
-        queryset = Advertiser.objects.filter(deleted_at__isnull=True).select_related(
-            "plan", "portal"
-        )
-        if self.action in ("list", "options_list"):
-            return queryset
-        return (
-            queryset.select_related("user", "integration", "integration__integrator")
-            .prefetch_related("advertiser_cities")
+        queryset = (
+            Advertiser.objects.filter(deleted_at__isnull=True)
+            .select_related("plan", "portal")
             .annotate(
                 properties_count=Count(
                     "properties", filter=Q(properties__deleted_at__isnull=True), distinct=True
                 )
             )
         )
+        if self.action in ("list", "options_list"):
+            return queryset
+        return queryset.select_related(
+            "user", "integration", "integration__integrator"
+        ).prefetch_related("advertiser_cities")
 
     def create(self, request, *args, **kwargs):
         """

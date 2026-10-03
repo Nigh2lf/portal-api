@@ -37,20 +37,37 @@ def neighborhood_display(obj):
     return obj.neighborhood_name or None
 
 
-def cover_photo_url(obj):
-    """URL da foto de capa (ou da primeira foto) a partir das fotos já pré-carregadas."""
+def photo_display_url(photo, request=None):
+    """Foto em tamanho cheio: hospedada (URL absoluta) ou a externa do anunciante."""
+    if photo.image:
+        return image_url(photo.image, request)
+    return photo.source_url or None
+
+
+def cover_photo_url(obj, request=None):
+    """Miniatura da capa (ou a própria foto, se não houver miniatura), das fotos já pré-carregadas."""
     photos = list(obj.photos.all())
     cover = next((photo for photo in photos if photo.is_cover), photos[0] if photos else None)
-    return image_url(cover.image) if cover else None
+    if cover is None:
+        return None
+    return image_url(cover.thumbnail, request) if cover.thumbnail else photo_display_url(cover, request)
 
 
 class PropertyPhotoSerializer(serializers.ModelSerializer):
-    image_url = ImageUrlField(source="image")
-    thumbnail_url = ImageUrlField(source="thumbnail")
+    image_url = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+    is_hosted = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = PropertyPhoto
-        fields = ("id", "image_url", "thumbnail_url", "sort_order", "is_cover")
+        fields = ("id", "image_url", "thumbnail_url", "is_hosted", "source_url", "sort_order", "is_cover")
+
+    def get_image_url(self, obj):
+        return photo_display_url(obj, self.context.get("request"))
+
+    def get_thumbnail_url(self, obj):
+        request = self.context.get("request")
+        return image_url(obj.thumbnail, request) if obj.thumbnail else photo_display_url(obj, request)
 
 
 class PropertyFeeSerializer(serializers.ModelSerializer):
@@ -133,7 +150,7 @@ class PropertyListSerializer(serializers.ModelSerializer):
         return neighborhood_display(obj)
 
     def get_cover_photo_url(self, obj):
-        return cover_photo_url(obj)
+        return cover_photo_url(obj, self.context.get("request"))
 
 
 class PropertyDetailSerializer(serializers.ModelSerializer):
@@ -174,4 +191,4 @@ class PropertyDetailSerializer(serializers.ModelSerializer):
         return neighborhood_display(obj)
 
     def get_cover_photo_url(self, obj):
-        return cover_photo_url(obj)
+        return cover_photo_url(obj, self.context.get("request"))

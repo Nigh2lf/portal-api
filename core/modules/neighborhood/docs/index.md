@@ -20,7 +20,7 @@ Query params: `search` (`name`, `slug`, `city__name`), `city` (UUID),
 `city__name`), `page`, `page_size`.
 
 `data.results[]`: `id`, `name`, `slug`, `city` (UUID), `city_name`,
-`state_code`, `is_active`, `created_at`.
+`state` (UUID), `state_code`, `is_active`, `created_at`.
 
 ## GET /api/v1/neighborhoods/{id}/
 

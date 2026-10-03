@@ -113,3 +113,16 @@ completa de fotos. Erros: `404`.
 Body: `{"ids": ["<uuid>", ...]}` na nova ordem. Fotos não listadas vão para o
 fim, mantendo a ordem relativa. Resposta `200`, `data[]`: lista completa de
 fotos. Erros: `400` (`error.ids` com UUIDs que não pertencem ao imóvel).
+
+## Fotos: hospedadas × externas
+
+- Imóveis integrados por XML **não têm as fotos hospedadas**: cada `PropertyPhoto`
+  guarda só `source_url` (URL no servidor do anunciante) e `is_hosted = false`.
+  Somente a **capa** recebe `thumbnail` (480x320, gravada no S3 como
+  `properties/thumbs/<slug-do-imovel>-<uid>.jpg`).
+- Fotos enviadas pelo painel (`POST /properties/{id}/photos/`) são hospedadas
+  (`image`, `is_hosted = true`, nome `properties/<slug-do-imovel>-<uid>.<ext>`);
+  a capa também ganha `thumbnail`.
+- `image_url` devolve a URL hospedada ou a externa; `thumbnail_url` devolve a
+  miniatura ou, na falta dela, a mesma URL de `image_url`. `cover_photo_url`
+  da listagem segue a mesma regra.

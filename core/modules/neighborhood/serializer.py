@@ -27,6 +27,7 @@ class NeighborhoodSerializer(serializers.ModelSerializer):
 
 class NeighborhoodListSerializer(serializers.ModelSerializer):
     city_name = serializers.CharField(source="city.name", read_only=True)
+    state = serializers.UUIDField(source="city.state_id", read_only=True)
     state_code = serializers.CharField(source="city.state.code", read_only=True)
 
     class Meta:
@@ -37,6 +38,7 @@ class NeighborhoodListSerializer(serializers.ModelSerializer):
             "slug",
             "city",
             "city_name",
+            "state",
             "state_code",
             "is_active",
             "created_at",
@@ -45,6 +47,7 @@ class NeighborhoodListSerializer(serializers.ModelSerializer):
 
 class NeighborhoodDetailSerializer(serializers.ModelSerializer):
     city_name = serializers.CharField(source="city.name", read_only=True)
+    state = serializers.UUIDField(source="city.state_id", read_only=True)
     state_code = serializers.CharField(source="city.state.code", read_only=True)
 
     class Meta:
@@ -55,6 +58,7 @@ class NeighborhoodDetailSerializer(serializers.ModelSerializer):
             "slug",
             "city",
             "city_name",
+            "state",
             "state_code",
             "import_aliases",
             "is_active",

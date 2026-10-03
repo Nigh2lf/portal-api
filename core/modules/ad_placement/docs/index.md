@@ -17,7 +17,7 @@ Toda resposta usa o envelope `{success, status, message, data, error}`.
 
 ## GET /api/v1/ad-placements/
 
-Query params: `search` (`code`, `name`), `page`, `kind`, `is_active`,
+Query params: `search` (`code`, `name`), `page_type` (filtro por página do site: `HOME` | `SEARCH` | `PROPERTY`; o nome difere do campo porque `page` é a paginação), `kind`, `is_active`,
 `ordering` (`code`, `name`, `page`, `kind`, `monthly_price`, `created_at`),
 `page` (paginação), `page_size`.
 

@@ -126,6 +126,7 @@ class AdvertiserSerializer(serializers.ModelSerializer):
 class AdvertiserListSerializer(serializers.ModelSerializer):
     plan_name = serializers.CharField(source="plan.name", read_only=True)
     portal_name = serializers.CharField(source="portal.name", read_only=True)
+    properties_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Advertiser
@@ -141,6 +142,7 @@ class AdvertiserListSerializer(serializers.ModelSerializer):
             "portal",
             "portal_name",
             "is_published",
+            "properties_count",
             "created_at",
         )
 

@@ -11,7 +11,7 @@ Fonte do legado: `new/db-portal-202610031131.sql` (MySQL `portal`, 44 tabelas, 1
 
 ```
 Portal ──< PortalCity >── City ──< Neighborhood
-  │  └──< PortalMenuItem, PortalHomeCache, Banner, Ad, Tip, BlogPost
+  │  └──< PortalMenuItem, Banner, Ad, Tip, BlogPost
   │
   └──< Advertiser ──1 User (core.User, login JWT)
          ├── Plan
@@ -33,7 +33,6 @@ BlockedSender, State, ScheduledTaskRun
 | Tabela legada | Model | Observações |
 |---|---|---|
 | `Portal` + `Global.php` | `Portal`, `PortalCity`, `PortalMenuItem` | `Cidades` (CSV) vira `PortalCity`; `Id_PortalCombinado` vira M2M `combined_portals`; SMTP/senha saem do banco (env). Tudo que era hard-coded no `Global.php` (SEO, redes, GA4, logo, slug de imobiliárias) entra aqui. |
-| `PreProcessamento` | `PortalHomeCache` | `Fonte` vira `kind` (choices); `Json` vira `payload` JSONField. |
 | `banner` | `Banner` | Agora pode ser por portal. |
 | `UF` | `State` | |
 | `cidade` | `City` | `Regras` vira `import_aliases` (JSON). Ganha `slug`. |
@@ -46,7 +45,7 @@ BlockedSender, State, ScheduledTaskRun
 | `imoveltipo` | `PropertyType` | `Regras` vira `import_aliases`; ganha `is_residential`. |
 | `imovelinfra`, `imovelinfracondominio` | `Feature` | Uma tabela com `scope`. No imóvel vira M2M em vez de string `a;b;c`. |
 | `imovel` + view `imovelportal` | `Property` | Preços de `varchar` para decimal. `Suite/Banheiro/Garagem` de varchar para inteiro. `ImovelTipo/Cidade/Bairro/UF` (texto denormalizado) descartados: ficam só as FKs + `neighborhood_name` para "outro bairro". `Imagem/Imagem_Mini/ImagemExcluir` (JSON) viram `PropertyPhoto`. `FeiraoImoveis/PrecoFeirao/FlagTeste/ImagemLocal/Regiao` descartados. Ganha `slug`, `title`, `status`, `published_at`. |
-| `imovelfoto` + JSON `imovel.Imagem` | `PropertyPhoto` | `NoImagem` vira `sort_order`; `Mini` vira `is_cover`. |
+| `imovelfoto` + JSON `imovel.Imagem` | `PropertyPhoto` | `NoImagem` vira `sort_order`; `Mini` vira `is_cover`. Fotos de XML ficam só em `source_url` (não hospedadas); apenas a capa recebe `thumbnail` no S3. Fotos enviadas pelo painel vão para `image`. |
 | `imoveltaxa` | `PropertyFee` | `Valor` decimal; `Obs` vira `period` (choices) + `notes`. |
 | `mensagem` | `PropertyInquiry` | FK real para `Property` (nulo se o imóvel sumir) + `property_reference_code`. Ganha `contact_preferences`. |
 | `Contato` | `ContactMessage` + `PropertyRequest` | A tabela misturava contato e encomenda; separadas. |
@@ -76,6 +75,7 @@ BlockedSender, State, ScheduledTaskRun
 | `Empreendimento`, `MensagemEmpreendimento`, `EstatisticaEmpreedimentoAcesso`, `EstatisticaEmpreendimentoClick` | Funcionalidade morta: 2 registros, rota sem arquivo PHP. Se voltar, entra como `Development`. |
 | `EstatisticaFeiraoAcesso`, `imovel.FeiraoImoveis`, `PrecoFeirao`, `*.Feirao` | Evento de 2019, sem página. |
 | `bairro_Antigo` | Backup manual. |
+| `PreProcessamento` | Cache da home; no novo modelo os blocos da home são calculados por query/cache de aplicação, sem tabela. |
 | `cliente.Imobiliaria_Petropolis`, `cliente.Imobiliaria_Teresopolis`, `cliente.TrustImovel` | Não lidos em lugar nenhum do PHP. |
 | Views `AcessoMes`, `CliqueMes`, `MensagemDia`, `MensagemMes`, `BuscaPorCampo`, `RelevanciaImovel`, `imoveisrepetidos`, `imovelfotomini`, `imoveltotal`, `imovelvalorcorreto`, `AtualizacaoImoveisCliente` | Relatórios ad hoc; viram queries no ORM/anotações quando forem necessários. |
 
@@ -83,7 +83,7 @@ BlockedSender, State, ScheduledTaskRun
 
 1. **Objetivo derivado dos preços** (`sale_price`, `rent_price`, `seasonal_rent_price`), como no legado. Alternativa: campo `purpose` explícito + um preço só. Mantive o legado porque um imóvel pode estar à venda e para alugar ao mesmo tempo.
 2. **Features como M2M** em vez de string separada por `;`. Exige tabela de catálogo com `slug` estável para a importação XML mapear nomes.
-3. **Fotos em tabela própria** (`PropertyPhoto`) em vez de JSON na coluna. Permite ordenar, marcar capa e gerar miniaturas por registro.
+3. **Fotos em tabela própria** (`PropertyPhoto`) em vez de JSON na coluna. Permite ordenar, marcar capa e gerar miniaturas por registro. Fotos de anunciantes integrados por XML **não são hospedadas** (só link externo + miniatura da capa).
 4. **`Advertiser` separado de `User`**: o `User` do boilerplate cuida de login, senha e verificação de e-mail; o `Advertiser` é o cadastro de negócio. Um anunciante sem login (importado) tem `user` nulo.
 5. **Limites por anunciante como override nulo** (`property_limit` etc.). O legado copiava os valores do plano no cadastro; aqui o plano é a fonte e o override só existe quando um cliente negocia algo diferente.
 6. **Contato e encomenda separados** (`ContactMessage` × `PropertyRequest`); no legado era uma tabela com 18 colunas opcionais.

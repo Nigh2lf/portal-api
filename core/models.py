@@ -18,6 +18,7 @@ Organização do arquivo:
 
 from __future__ import annotations
 
+import builtins
 import uuid
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
@@ -55,7 +56,6 @@ __all__ = [
     "Portal",
     "PortalCity",
     "PortalMenuItem",
-    "PortalHomeCache",
     "Banner",
     "State",
     "City",
@@ -565,31 +565,6 @@ class PortalMenuItem(AbstractModel):
         return f"{self.portal_id}: {self.label}"
 
 
-class PortalHomeCache(AbstractModel):
-    """Legado: ``PreProcessamento``. Blocos da home pré-calculados por cron."""
-
-    class Kind(models.TextChoices):
-        FEATURED_PROPERTIES = "FEATURED_PROPERTIES", "Imóveis em destaque"
-        TOP_SEARCHES = "TOP_SEARCHES", "Imóveis mais procurados"
-        TOP_NEIGHBORHOODS = "TOP_NEIGHBORHOODS", "Bairros mais anunciados"
-        TOP_CITIES = "TOP_CITIES", "Cidades mais procuradas"
-        TOTAL_PROPERTIES = "TOTAL_PROPERTIES", "Total de imóveis"
-        MAX_PRICE = "MAX_PRICE", "Maior valor"
-        CITIES = "CITIES", "Cidades do portal"
-
-    portal = models.ForeignKey(Portal, on_delete=models.CASCADE, related_name="home_cache")
-    kind = models.CharField(max_length=30, choices=Kind.choices)
-    payload = models.JSONField(default=dict, blank=True)
-    generated_at = models.DateTimeField()
-
-    class Meta(AbstractModel.Meta):
-        app_label = "core"
-        unique_together = ("portal", "kind")
-
-    def __str__(self):
-        return f"{self.portal_id}:{self.kind}"
-
-
 class Banner(AbstractModel):
     """Legado: ``banner``. Imagens de fundo do hero da home e do topo das internas."""
 
@@ -864,12 +839,28 @@ class Property(LegacyIdMixin, SoftDeleteMixin, AbstractModel):
         return f"{self.reference_code} - {self.title}"
 
 
+def property_photo_path(instance, filename):
+    """``properties/<slug-do-imovel>-<uid>.<ext>``."""
+    ext = (filename.rsplit(".", 1)[-1] if "." in filename else "jpg").lower()[:5]
+    return f"properties/{instance.property.slug}-{uuid.uuid4().hex[:10]}.{ext}"
+
+
+def property_thumbnail_path(instance, filename):
+    """``properties/thumbs/<slug-do-imovel>-<uid>.jpg``."""
+    return f"properties/thumbs/{instance.property.slug}-{uuid.uuid4().hex[:10]}.jpg"
+
+
 class PropertyPhoto(LegacyIdMixin, AbstractModel):
-    """Legado: ``imovelfoto`` + JSON em ``imovel.Imagem``. Uma linha por foto; ``is_cover`` = miniatura principal."""
+    """Legado: ``imovelfoto`` + JSON em ``imovel.Imagem``. Uma linha por foto; ``is_cover`` = miniatura principal.
+
+    Fotos de imóveis integrados por XML não são hospedadas: ficam só em
+    ``source_url`` (``image`` vazio) e apenas a capa ganha ``thumbnail``. Fotos
+    enviadas pelo painel do portal são gravadas em ``image``.
+    """
 
     property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name="photos")
-    image = models.ImageField(upload_to="properties/")
-    thumbnail = models.ImageField(upload_to="properties/thumbs/", blank=True, null=True)
+    image = models.ImageField(upload_to=property_photo_path, blank=True, null=True)
+    thumbnail = models.ImageField(upload_to=property_thumbnail_path, blank=True, null=True)
     source_url = models.URLField(max_length=500, blank=True, default="", help_text="URL original quando veio do XML.")
     sort_order = models.PositiveSmallIntegerField(default=0)
     is_cover = models.BooleanField(default=False)
@@ -880,6 +871,17 @@ class PropertyPhoto(LegacyIdMixin, AbstractModel):
 
     def __str__(self):
         return f"{self.property_id} #{self.sort_order}"
+
+    @builtins.property
+    def is_hosted(self):
+        return bool(self.image)
+
+    @builtins.property
+    def display_url(self):
+        """URL da foto em tamanho cheio: hospedada ou a externa do anunciante."""
+        if self.image:
+            return self.image.url
+        return self.source_url or None
 
 
 class PropertyFee(LegacyIdMixin, AbstractModel):
