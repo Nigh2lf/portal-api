@@ -39,8 +39,9 @@ Body: `email` (obrigatório, único), `password` (obrigatório, passa pelos
 validadores do Django), `name`, `profile_image`, `profiles` (lista de UUID de
 `Profile`).
 
-`is_active`, `role` e `is_staff` são ignorados no payload — o usuário nasce
-`is_active=True`, `role=USER`, `is_staff=False`.
+`role` (`ADMIN`/`USER`) e `is_active` são aceitos **apenas quando o solicitante
+tem `role=ADMIN`**; para os demais o usuário nasce `role=USER`, `is_active=True`.
+`is_staff` é sempre `False`.
 
 Com `EMAIL_VERIFICATION_REQUIRED=True` o cadastro gera o código e envia o e-mail
 de verificação; caso contrário envia o welcome. Falha no envio não derruba o
@@ -54,8 +55,10 @@ Erros: `400` (e-mail duplicado, senha ausente/fraca).
 Body: `email`, `name`, `profile_image`, `profiles`, `password` + `old_password`.
 
 `password` só é aceito junto com `old_password` correto — senão `400` em
-`error.old_password`. Enviar `profiles` substitui a lista inteira de vínculos.
-`id`, `role`, `is_active`, `created_at` e `updated_at` são read-only.
+`error.old_password`. Exceção: um solicitante `ADMIN` alterando **outro**
+usuário pode enviar `password` sem `old_password`. `role` e `is_active` só são
+gravados por solicitante `ADMIN`. Enviar `profiles` substitui a lista inteira de
+vínculos. `id`, `created_at` e `updated_at` são read-only.
 
 ## DELETE /api/v1/users/{id}/
 

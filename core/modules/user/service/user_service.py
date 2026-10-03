@@ -19,6 +19,9 @@ FORGOT_PASSWORD_TTL = timedelta(hours=1)
 
 
 class UserService:
+    def __init__(self, actor=None):
+        self.actor = actor
+
     def create(self, validated_data):
         """
         Cria o usuário, vincula os profiles e dispara o e-mail de cadastro
@@ -33,7 +36,10 @@ class UserService:
         password = validated_data.pop("password")
         validated_data.pop("old_password", None)
 
-        user = User(**validated_data, is_active=True, role=User.Role.USER, is_staff=False)
+        role = validated_data.pop("role", User.Role.USER) if self._actor_is_admin() else User.Role.USER
+        is_active = validated_data.pop("is_active", True)
+
+        user = User(**validated_data, is_active=is_active, role=role, is_staff=False)
         user.set_password(password)
         user.save()
 
@@ -44,7 +50,7 @@ class UserService:
 
     def update(self, instance, validated_data):
         """
-        Atualiza o usuário; a troca de senha exige a senha atual
+        Atualiza o usuário; a troca de senha exige a senha atual, salvo quando um ADMIN altera outro usuário
 
         Args:
             instance: usuário a atualizar
@@ -57,8 +63,13 @@ class UserService:
         password = validated_data.pop("password", None)
         old_password = validated_data.pop("old_password", None)
 
+        if not self._actor_is_admin():
+            validated_data.pop("role", None)
+            validated_data.pop("is_active", None)
+
         if password is not None:
-            if not old_password or not instance.check_password(old_password):
+            admin_editando_outro = self._actor_is_admin() and self.actor.pk != instance.pk
+            if not admin_editando_outro and (not old_password or not instance.check_password(old_password)):
                 raise serializers.ValidationError({"old_password": [_("Senha atual incorreta.")]})
             instance.set_password(password)
 
@@ -164,6 +175,9 @@ class UserService:
         else:
             with suppress(Exception):  # noqa: BLE001 - idem
                 send_email_welcome(user.email, user.name)
+
+    def _actor_is_admin(self):
+        return bool(self.actor) and getattr(self.actor, "role", None) == User.Role.ADMIN
 
     @staticmethod
     def _sync_profiles(user, profiles):

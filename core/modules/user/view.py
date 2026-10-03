@@ -204,4 +204,4 @@ class UserViewSet(BaseModelViewSet):
         )
 
     def _service(self) -> UserService:
-        return UserService()
+        return UserService(actor=getattr(self.request, "user", None))
