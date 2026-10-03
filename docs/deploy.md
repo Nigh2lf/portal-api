@@ -77,13 +77,13 @@ THROTTLE_FORGOT=5/hour
 THROTTLE_CEP=120/hour
 ```
 
-## Noclaf (e-mail + CEP)
+## E-mail (Brevo) e CEP (ViaCEP)
 
 ```bash
-NOCLAF_API_KEY=<uuid>
+BREVO_API_KEY=<chave da Brevo>
 # Opcionais (defaults bons):
-NOCLAF_API_BASE_URL=https://emails.noclaf.com.br/core/
-NOCLAF_API_TIMEOUT=10
+EMAIL_SENDER_ADDRESS=<remetente validado na Brevo>
+CEP_CACHE_DAYS=365
 ```
 
 ## Branding de e-mail
@@ -158,7 +158,7 @@ gunicorn config.wsgi:application \
 DEBUG=False \
 SECRET_KEY=<real> \
 ALLOWED_HOSTS=api.meuapp.com \
-NOCLAF_API_KEY=<real> \
+BREVO_API_KEY=<real> \
 python manage.py check --deploy --fail-level WARNING
 ```
 
@@ -180,10 +180,10 @@ Acesse `/admin/`, logue, tente abrir `/api/v1/docs/swagger/` — deve abrir.
 - `CORS_ALLOW_ALL_ORIGINS=True`
 - `SECRET_KEY` igual ao do dev
 - `ALLOWED_HOSTS=*`
-- `NOCLAF_API_KEY` vazio (e-mails e CEP cairão silenciosamente)
+- `BREVO_API_KEY` vazio (e-mails não serão enviados)
 
 ## Logs
 
 Tudo via `logging` padrão Django. Configure handler para CloudWatch / Datadog / etc. via `LOGGING` em [config/settings.py](../config/settings.py) se precisar.
 
-Falhas em integrações (Noclaf email, CEP) **logam mas não levantam**, então monitore o nível `WARNING`/`ERROR` do logger `core.services.*`.
+Falhas em integrações (Brevo, ViaCEP) **logam mas não levantam**, então monitore o nível `WARNING`/`ERROR` do logger `core.services.*`.

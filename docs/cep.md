@@ -1,6 +1,9 @@
 # CEP Lookup
 
-Endpoint público para autocompletar endereço. Proxy server-side da API Noclaf.
+Endpoint público para autocompletar endereço. Consulta a **ViaCEP** e grava o
+resultado na tabela `PostalCode` (`core.PostalCode`): a segunda consulta do
+mesmo CEP não sai do banco. CEPs inexistentes também são gravados
+(`not_found=True`) para não reconsultar.
 
 ## Endpoint
 
@@ -32,60 +35,29 @@ GET /api/v1/cep/<cep>/
 }
 ```
 
-> O shape exato do `data` é repassado da API Noclaf — pode variar conforme a fonte upstream.
+### Erros
 
-### 400 Bad Request — CEP inválido
+| Status | Quando |
+|---|---|
+| 400 | CEP com menos/mais de 8 dígitos |
+| 404 | ViaCEP respondeu `{"erro": true}` |
+| 502 | Resposta inválida da ViaCEP |
+| 503 | ViaCEP indisponível (timeout/rede) |
 
-```json
-{ "success": false, "status": 400, "message": "CEP inválido.", "error": {"detail": "..."} }
-```
+## Configuração
 
-### 404 Not Found — CEP não encontrado
+| Variável | Default | Descrição |
+|---|---|---|
+| `VIACEP_URL` | `https://viacep.com.br/ws/{cep}/json/` | URL com placeholder `{cep}` |
+| `CEP_API_TIMEOUT` | `10` | Timeout em segundos |
+| `CEP_CACHE_DAYS` | `365` | Idade máxima do cache; `0` = nunca expira |
 
-```json
-{ "success": false, "status": 404, "message": "CEP não encontrado.", "error": {"detail": "..."} }
-```
-
-### 503 Service Unavailable — chave não configurada ou Noclaf fora do ar
-
-```json
-{ "success": false, "status": 503, "message": "Serviço de CEP indisponível.", "error": {"detail": "..."} }
-```
-
-## Por que server-side?
-
-- Esconde o `NOCLAF_API_KEY` do front.
-- Aplica throttle por IP (controle de custo).
-- Permite trocar de provedor sem mexer no front.
-
-## Service
-
-[core/services/services_cep.py](../core/services/services_cep.py):
+## Uso server-side
 
 ```python
-from core.services import lookup_cep, normalize_cep, CepLookupError
+from core.services import lookup_cep
 
-data, error = lookup_cep("01001-000")
+data, error = lookup_cep("01310-100")
 if error:
-    # error é instância de CepLookupError com .status e .message
-    ...
-else:
-    # data é dict
-    ...
-```
-
-`lookup_cep` **nunca** levanta exceção — sempre retorna a tupla. A view apenas mapeia para o envelope HTTP.
-
-## Exemplo de consumo no front
-
-```js
-async function buscarCep(cep) {
-  const resp = await fetch(`/api/v1/cep/${cep}/`);
-  const json = await resp.json();
-  if (!json.success) {
-    alert(json.message);
-    return null;
-  }
-  return json.data;
-}
+    ...  # error.status / error.message
 ```

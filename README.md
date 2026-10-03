@@ -1,6 +1,6 @@
 # Boilerplate API Django
 
-API REST Django + DRF pronta para produção. Autenticação JWT, envelope padronizado, integrações Noclaf (e-mail + CEP), storage S3 com assets públicos/privados, soft delete e UUID em todos os models.
+API REST Django + DRF pronta para produção. Autenticação JWT, envelope padronizado, Brevo (e-mail) e ViaCEP (CEP), storage S3 com assets públicos/privados, soft delete e UUID em todos os models.
 
 ## Stack
 
@@ -9,7 +9,7 @@ API REST Django + DRF pronta para produção. Autenticação JWT, envelope padro
 - **drf-spectacular** (Swagger / Redoc)
 - **MySQL** (prod) / **SQLite** (dev)
 - **AWS S3** opcional (público + privado)
-- **Noclaf API** unificada (envio de e-mail + lookup de CEP)
+- **Brevo** (e-mail transacional, via classe de serviço) e **ViaCEP** (CEP com cache em banco)
 
 ## Subir em 1 minuto
 
@@ -77,5 +77,5 @@ A documentação completa está em [`docs/`](docs/README.md). Atalhos:
 - Tudo sob `/api/v1/`.
 - Toda resposta usa o envelope `{success, status, message, data, error}`.
 - PKs são **UUID**.
-- Integrações externas falham silenciosamente (logam, não quebram fluxo).
+- Integrações externas (Brevo, ViaCEP) falham silenciosamente (logam, não quebram fluxo).
 - Senhas têm política configurável via env (`PASSWORD_*`).

@@ -48,7 +48,7 @@ from core.models import (
     User,
 )
 from core.modules.property.service.property_service import PropertyService
-from core.services import unique_slug
+from core.services import grant_advertiser_access, unique_slug
 from core.services.images import download, ensure_cover_thumbnail
 
 LEGACY_FILES_BASE = "https://www.petropolisimoveis.com/"
@@ -543,6 +543,8 @@ class Command(BaseCommand):
                 advertiser.user.save(update_fields=["password"])
 
             advertiser.save()
+            if advertiser.user_id:
+                grant_advertiser_access(advertiser.user)
 
             integration, _ = AdvertiserIntegration.objects.get_or_create(advertiser=advertiser)
             integration.integrator = Integrator.objects.filter(legacy_id=r["Id_Integrador"]).first()

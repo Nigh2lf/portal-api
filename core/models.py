@@ -52,6 +52,7 @@ __all__ = [
     "Permission",
     "ProfilePermission",
     "PublicAsset",
+    "PostalCode",
     "LegacyIdMixin",
     "Portal",
     "PortalCity",
@@ -1369,3 +1370,30 @@ class BlogPost(LegacyIdMixin, AbstractModel):
 
     def __str__(self):
         return self.title
+
+# =============================================================================
+# 14. Infra — cache de CEP (ViaCEP)
+# =============================================================================
+
+
+class PostalCode(models.Model):
+    """Resultado da ViaCEP gravado localmente; ``not_found`` evita reconsultar CEP inexistente."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    cep = models.CharField(max_length=8, unique=True)
+    street = models.CharField(max_length=200, blank=True, default="")
+    complement = models.CharField(max_length=200, blank=True, default="")
+    neighborhood = models.CharField(max_length=120, blank=True, default="")
+    city = models.CharField(max_length=120, blank=True, default="")
+    state_code = models.CharField(max_length=2, blank=True, default="")
+    ibge_code = models.CharField(max_length=10, blank=True, default="")
+    raw = models.JSONField(default=dict, blank=True)
+    not_found = models.BooleanField(default=False)
+    fetched_at = models.DateTimeField()
+
+    class Meta:
+        app_label = "core"
+        ordering = ("cep",)
+
+    def __str__(self):
+        return self.cep

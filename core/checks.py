@@ -12,7 +12,7 @@ IDs:
 - ``core.E004`` — Produção com ``SECRET_KEY`` fraca/default.
 - ``core.E005`` — Produção com ``ALLOWED_HOSTS`` permissivo (`*` ou vazio).
 - ``core.E006`` — Produção com ``CORS_ALLOW_ALL_ORIGINS=True``.
-- ``core.W003`` — Produção sem ``NOCLAF_API_KEY`` (e-mails/CEP silenciosamente quebrados).
+- ``core.W003`` — Produção sem ``BREVO_API_KEY`` (e-mails silenciosamente não enviados).
 - ``core.W004`` — Produção com ``SECURE_SSL_REDIRECT=False``.
 - ``core.W006`` — ``AllowAny`` usado sem comentário justificativo (``# allow-any:``).
 - ``core.W007`` — ``ModelSerializer.Meta.fields`` é ``"__all__"`` (proibido).
@@ -217,14 +217,12 @@ def check_production_hardening(app_configs, **kwargs):
             )
         )
 
-    # W003 — Noclaf API key
-    if not getattr(settings, "NOCLAF_API_KEY", "") and not getattr(
-        settings, "NOCLAF_EMAIL_API_KEY", ""
-    ):
+    # W003 — chave do provedor de e-mail
+    if not getattr(settings, "BREVO_API_KEY", ""):
         issues.append(
             Warning(
-                "NOCLAF_API_KEY não configurada. E-mails e CEP falharão silenciosamente.",
-                hint="Defina NOCLAF_API_KEY no ambiente de produção.",
+                "BREVO_API_KEY não configurada. E-mails não serão enviados.",
+                hint="Defina BREVO_API_KEY no ambiente de produção.",
                 id="core.W003",
             )
         )

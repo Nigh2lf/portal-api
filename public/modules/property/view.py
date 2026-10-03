@@ -1,12 +1,12 @@
 from django.db.models import Count, Q
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import ScopedRateThrottle
 
 from core.classes.base_viewset import BaseViewSet
 from core.classes.exception_handler import envelope_success
-from core.models import Advertiser, BlockedSender, Portal, Property, PropertyContactClick, PropertyInquiry, PropertyView
+from core.models import Advertiser, Portal, Property, PropertyContactClick, PropertyInquiry, PropertyView
 from public.modules.portal.serializer import PublicPropertyCardSerializer
 from public.modules.property.serializer import (
     PublicContactClickSerializer,
@@ -16,13 +16,9 @@ from public.modules.property.serializer import (
 )
 from public.modules.property.service import PURPOSE_PRICE_FIELD, SearchFilters, SearchService
 from public.services.scope import property_visibility_q, visible_properties, with_card_data
+from public.services.sender import client_ip, ensure_sender_allowed
 
 MAX_IDS = 100
-
-
-def client_ip(request):
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
-    return (forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR")) or None
 
 
 def is_mobile(request):
@@ -125,9 +121,7 @@ class PublicPropertyViewSet(BaseViewSet):
         if prop is None:
             raise ValidationError({"property": ["Imóvel não encontrado."]})
         ip = client_ip(request)
-        bloqueado = BlockedSender.objects.filter(is_active=True).filter(Q(email__iexact=dados["email"]) | Q(ip_address=ip)).exists()
-        if bloqueado:
-            raise PermissionDenied("Remetente bloqueado.")
+        ensure_sender_allowed(dados["email"], ip)
         inquiry = PropertyInquiry.objects.create(
             advertiser=prop.advertiser,
             property=prop,

@@ -53,15 +53,19 @@ Tokens são rotacionados (`ROTATE_REFRESH_TOKENS=True`) e antigos vão para o bl
 |---|---|---|
 | `URL_FORGOT_PASSWORD` | Sim (se for usar reset) | URL absoluta do front que recebe `?email=&hash=`. |
 
-## API Noclaf (e-mails + CEP)
+## E-mail (Brevo) e CEP (ViaCEP)
 
 Configuração unificada — uma chave atende todos os serviços.
 
 | Var | Default | Descrição |
 |---|---|---|
-| `NOCLAF_API_BASE_URL` | `https://emails.noclaf.com.br/core/` | Base de TODAS as APIs. |
-| `NOCLAF_API_KEY` | — | UUID do `X-Api-Key`. **Obrigatório**. |
-| `NOCLAF_API_TIMEOUT` | `10` | Timeout em segundos. |
+| `EMAIL_PROVIDER` | `brevo` | Provedor da classe de serviço de e-mail. |
+| `BREVO_API_KEY` | — | Chave da API transacional da Brevo. **Obrigatória em produção** (check `core.W003`). |
+| `BREVO_API_URL` | `https://api.brevo.com/v3/smtp/email` | Endpoint da Brevo. |
+| `EMAIL_API_TIMEOUT` | `10` | Timeout do envio em segundos. |
+| `VIACEP_URL` | `https://viacep.com.br/ws/{cep}/json/` | URL da ViaCEP com placeholder `{cep}`. |
+| `CEP_API_TIMEOUT` | `10` | Timeout da ViaCEP em segundos. |
+| `CEP_CACHE_DAYS` | `365` | Validade do cache em `PostalCode`; `0` = nunca expira. |
 
 ## E-mails (templates / branding)
 

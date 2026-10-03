@@ -15,7 +15,7 @@ São 44 testes em [core/tests/](../core/tests/), divididos por tema:
 | [test_health.py](../core/tests/test_health.py) | `GET /health/`, acesso ao `/schema/`, envelope em respostas não autenticadas. |
 | [test_users.py](../core/tests/test_users.py) | `User`: normalização de email, `set_password` limpa token, soft delete, verificação de e-mail. |
 | [test_passwords.py](../core/tests/test_passwords.py) | Validators de senha do Django: aceita forte, rejeita fraca. |
-| [test_emails.py](../core/tests/test_emails.py) | Cliente Noclaf é no-op sem `NOCLAF_API_KEY`. |
+| [test_emails.py](../core/tests/test_emails.py) | Fábrica de e-mail cai no `NullEmailService` sem `BREVO_API_KEY`; payload da Brevo. |
 | [test_cep.py](../core/tests/test_cep.py) | `normalize_cep`, `lookup_cep` (400/503), endpoint `/cep/<cep>/`. |
 | [test_permissions.py](../core/tests/test_permissions.py) | Auditoria do router, `SafeDefaultPermission` (parametrizado), `CustomPermissionClass` (`view_name`, `router_user`, `view_read`). |
 | [test_checks.py](../core/tests/test_checks.py) | Production hardening, `AllowAny` justificado (W006), PII em serializers (W007/W008), migrations pendentes (E008). |
@@ -79,13 +79,13 @@ deactivate && rm -rf venv-check
 - Use a fixture `settings` do pytest-django no lugar de `override_settings`:
   ```python
   def test_x(settings):
-      settings.NOCLAF_API_KEY = ""
+      settings.BREVO_API_KEY = ""
       ...
   ```
 - Para mockar, use `mocker` (pytest-mock):
   ```python
   def test_envia_email(mocker):
-      mock = mocker.patch("core.services.services_emails._noclaf_send", return_value=True)
+      mock = mocker.patch("core.services.email.brevo.BrevoEmailService.send", return_value=True)
       ...
       mock.assert_called_once()
   ```
@@ -96,5 +96,5 @@ deactivate && rm -rf venv-check
   ```
 - Reutilize fixtures globais ([conftest.py](../core/tests/conftest.py)): `client`, `api_client`, `user`, `admin_user`.
 - Para testes de endpoint protegido: `api_client.force_authenticate(user=user)`.
-- Não bater em rede real. Mock `urllib.request.urlopen` ou o helper `_noclaf_send`.
+- Não bater em rede real. Mock `urllib.request.urlopen` ou `BrevoEmailService.send`.
 - Para soft delete, sempre verificar `deleted_at`/`is_active`, não `Model.DoesNotExist`.

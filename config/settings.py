@@ -349,20 +349,19 @@ MODEL_AUDIT_MODELS = [
 ]
 
 # ---------------------------------------------------------------------------
-# E-mail transacional via API da Noclaf (https://emails.noclaf.com.br/)
+# E-mail transacional — classe de serviço (core/services/email), provedor Brevo
 # ---------------------------------------------------------------------------
-# Base única de TODAS as APIs internas da Noclaf (e-mail, CEP, etc.).
-NOCLAF_API_BASE_URL = os.getenv("NOCLAF_API_BASE_URL", "https://emails.noclaf.com.br/core/")
-NOCLAF_API_KEY = os.getenv("NOCLAF_API_KEY") or os.getenv("NOCLAF_EMAIL_API_KEY")
-NOCLAF_API_TIMEOUT = int(os.getenv("NOCLAF_API_TIMEOUT", "10"))
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "brevo")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+BREVO_API_URL = os.getenv("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email")
+EMAIL_API_TIMEOUT = int(os.getenv("EMAIL_API_TIMEOUT", "10"))
 
-# Retrocompat: variantes específicas continuam funcionando, mas usam a base acima
-# como default.
-NOCLAF_EMAIL_API_URL = os.getenv(
-    "NOCLAF_EMAIL_API_URL", NOCLAF_API_BASE_URL.rstrip("/") + "/send-html-email/"
-)
-NOCLAF_EMAIL_API_KEY = NOCLAF_API_KEY  # X-Api-Key (UUID)
-NOCLAF_EMAIL_TIMEOUT = int(os.getenv("NOCLAF_EMAIL_TIMEOUT", str(NOCLAF_API_TIMEOUT)))
+# ---------------------------------------------------------------------------
+# CEP — ViaCEP direto, com cache na tabela PostalCode
+# ---------------------------------------------------------------------------
+VIACEP_URL = os.getenv("VIACEP_URL", "https://viacep.com.br/ws/{cep}/json/")
+CEP_API_TIMEOUT = int(os.getenv("CEP_API_TIMEOUT", "10"))
+CEP_CACHE_DAYS = int(os.getenv("CEP_CACHE_DAYS", "365"))
 
 EMAIL_SENDER_NAME = os.getenv("EMAIL_SENDER_NAME", PROJECT_NAME)
 EMAIL_SENDER_ADDRESS = os.getenv("EMAIL_SENDER_ADDRESS", "no-reply@example.com")

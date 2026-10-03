@@ -17,7 +17,7 @@ Este projeto tem padrões fortes. Reusar > recriar. Sempre.
 | Model novo | `core/models.py` | UUID PK + `AbstractModel` (base com timestamps/soft-delete) |
 | Admin | `core/admin.py` | `autoregister("core")` cobre o básico. Só registre manual se precisar de algo específico |
 | Comando management | `core/management/commands/` | Ver `createuser.py` como template |
-| Envio de e-mail | `core/services/services_emails.py` | Não chame SMTP direto. Use Noclaf API |
+| Envio de e-mail | `core/services/services_emails.py` → `send_template_email()` | Não chame SMTP nem a API do provedor direto. A classe `core/services/email` (Brevo) é o único ponto de envio |
 | Consulta CEP / API externa | `core/views/cep.py` | Throttle `ScopedRateThrottle` + scope dedicado |
 | Endpoint **público do site** (`AllowAny`, consumido pelo portal-web) | app `public/` ([public/README.md](public/README.md)) | `public/modules/<modulo>/`, rota em `public/urls.py`, throttle `public`; nunca em `core/modules/` |
 | Resposta de API | `core/classes/base_viewset.py::_response_format` | Envelope `{success, status, message, data, error}` |
@@ -331,7 +331,7 @@ Ficam de fora da regra (são exigência de ferramenta, não comentário):
    mexeu em model, avise e pare por aí. E nunca edite migration já mergeada.
 9. **Nunca** desligue check, pre-commit hook, ou teste sem justificar no PR.
 10. **Em prod:** `DEBUG=False`, `ALLOWED_HOSTS` específico, `SECRET_KEY` forte,
-    `SECURE_SSL_REDIRECT=True`, `NOCLAF_API_KEY` setada, migrations aplicadas
+    `SECURE_SSL_REDIRECT=True`, `BREVO_API_KEY` setada, migrations aplicadas
     (E004/E005/W004/W003/E008 disparam se faltar).
 
 ## 3. Antes de abrir PR, rode local
@@ -364,8 +364,7 @@ Mensagens curtas, em português, no imperativo:
 - Django 4.2 + DRF 3.14 + SimpleJWT (rotation + blacklist) + drf-spectacular
 - Python 3.10+ · MySQL prod / SQLite dev · python-dotenv
 - Storage: S3 (`MediaStorage` privado, `PublicMediaStorage` público) ou filesystem
-- API externa: **Noclaf API** (e-mail + CEP). Variáveis: `NOCLAF_API_BASE_URL`,
-  `NOCLAF_API_KEY`, `NOCLAF_API_TIMEOUT`.
+- APIs externas: **Brevo** (e-mail, `BREVO_API_KEY`) e **ViaCEP** (CEP, cache em `PostalCode`).
 - UUID PK em **todos** os models.
 - Soft delete é **opt-in** via `SoftDeleteMixin`.
 

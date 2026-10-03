@@ -80,7 +80,7 @@ Rodam apenas em `manage.py check --deploy` (use na CI/CD antes do deploy):
 | `core.E005` | `ALLOWED_HOSTS` vazio ou contendo `*` em prod |
 | `core.E006` | `CORS_ALLOW_ALL_ORIGINS=True` em prod |
 | `core.E008` | Migrations pendentes em prod (derruba o boot) |
-| `core.W003` | `NOCLAF_API_KEY` ausente em prod (e-mails/CEP falham silenciosamente) |
+| `core.W003` | `BREVO_API_KEY` ausente em prod (e-mails não são enviados) |
 | `core.W004` | `SECURE_SSL_REDIRECT=False` em prod |
 | `core.W006` | `AllowAny` usado sem comentário `# allow-any: <motivo>` |
 | `core.W007` | `ModelSerializer.Meta.fields = "__all__"` (proibido) |

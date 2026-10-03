@@ -26,7 +26,7 @@ def test_weak_secret_key_blocks_prod(settings) -> None:
     settings.SECRET_KEY = "change-me-please"
     settings.ALLOWED_HOSTS = ["api.x.com"]
     settings.CORS_ALLOW_ALL_ORIGINS = False
-    settings.NOCLAF_API_KEY = "x"
+    settings.BREVO_API_KEY = "x"
     settings.SECURE_SSL_REDIRECT = True
 
     issues = check_production_hardening(None)
@@ -38,7 +38,7 @@ def test_wildcard_allowed_hosts_blocks_prod(settings) -> None:
     settings.SECRET_KEY = "x" * 60
     settings.ALLOWED_HOSTS = ["*"]
     settings.CORS_ALLOW_ALL_ORIGINS = False
-    settings.NOCLAF_API_KEY = "x"
+    settings.BREVO_API_KEY = "x"
     settings.SECURE_SSL_REDIRECT = True
 
     issues = check_production_hardening(None)

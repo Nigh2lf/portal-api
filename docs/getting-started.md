@@ -133,5 +133,5 @@ Esperado: `OK` com todos os testes passando.
 ## Próximos passos
 
 - [auth-permissions.md](auth-permissions.md) — entender o modelo de permissões.
-- [emails.md](emails.md) — configurar a Noclaf API para enviar e-mails reais.
+- [emails.md](emails.md) — configurar a Brevo para enviar e-mails reais.
 - [architecture.md](architecture.md) — criar seu primeiro `ViewSet`.

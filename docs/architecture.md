@@ -122,7 +122,7 @@ Integrações externas isoladas em `core/services/`. Regras:
 
 - **Não levantam exceções** que cheguem na view. Retornam `bool` ou tupla `(data, error)`.
 - Chamadas HTTP via `urllib.request` (zero deps extras).
-- Timeout sempre via `settings.NOCLAF_API_TIMEOUT`.
+- Timeout sempre via settings (`EMAIL_API_TIMEOUT`, `CEP_API_TIMEOUT`).
 - Erros são logados via `logging` (logger por módulo).
 
 ## Tests

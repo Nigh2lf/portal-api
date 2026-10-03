@@ -1,7 +1,7 @@
-"""Consulta pública de CEP via API da Noclaf.
+"""Consulta pública de CEP (ViaCEP com cache em banco).
 
 Este endpoint NÃO exige autenticação do usuário final (front-end consome
-direto), mas é throttled (`scope='cep'`) para proteger nossa cota na Noclaf.
+direto), mas é throttled (`scope='cep'`) para não abusar da ViaCEP.
 """
 
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -28,7 +28,7 @@ class _CepResponseSerializer(serializers.Serializer):
 class CepLookupView(APIView):
     """GET /api/v1/cep/<cep>/ — consulta pública (com throttle)."""
 
-    # allow-any: lookup pblico para autocompletar endereo no front; throttle por IP.
+    # allow-any: lookup público para autocompletar endereço no front; throttle por IP.
     permission_classes = [AllowAny]
     authentication_classes: list = []
     throttle_classes = [ScopedRateThrottle]
