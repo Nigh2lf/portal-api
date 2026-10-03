@@ -90,3 +90,16 @@ de `featured-properties`). `404` se o imóvel não estiver visível no portal.
 
 O detalhe aceita `?related=0` para não calcular os relacionados; o site usa
 essa opção e busca esta rota à parte, para a página aparecer antes.
+
+## Vários bairros na busca
+
+`GET /api/v1/public/portals/{portal_slug}/properties/` aceita
+`neighborhood=slug1,slug2` (até 20). Sem `city`, cada slug é resolvido
+preferindo a cidade principal do portal. Slugs inexistentes são ignorados; se
+nenhum existir, o resultado é vazio. `data.applied.neighborhoods` traz
+`[{name, slug}]` dos bairros aplicados; `data.applied.neighborhood` continua
+preenchido só quando há exatamente um. Com bairros de uma única cidade e sem
+`city`, `applied.city` vem preenchida com essa cidade.
+
+`show_city_filter` do portal vem `true` quando a flag está ligada **ou** o
+portal tem mais de uma cidade.

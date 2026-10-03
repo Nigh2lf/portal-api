@@ -58,6 +58,7 @@ class PublicPortalSerializer(serializers.ModelSerializer):
     logo_mobile_url = ImageUrlField(source="logo_mobile")
     og_image_url = ImageUrlField(source="og_image")
     total_properties = serializers.IntegerField(read_only=True)
+    show_city_filter = serializers.SerializerMethodField()
 
     class Meta:
         model = Portal
@@ -96,6 +97,10 @@ class PublicPortalSerializer(serializers.ModelSerializer):
 
     def get_cities(self, obj):
         return PublicCitySerializer([pc.city for pc in obj.portal_cities.all()], many=True).data
+
+    def get_show_city_filter(self, obj):
+        # Portal com mais de uma cidade sempre deixa o visitante escolher a cidade na busca.
+        return obj.show_city_filter or len(obj.portal_cities.all()) > 1
 
     def get_menu_items(self, obj):
         itens = [m for m in obj.menu_items.all() if m.is_active]

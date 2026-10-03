@@ -150,6 +150,7 @@ class PublicSearchResultSerializer(serializers.Serializer):
         return {
             "property_type": {"name": r["property_type"].name, "slug": r["property_type"].slug} if r["property_type"] else None,
             "city": {"name": r["city"].name, "slug": r["city"].slug, "state_code": r["city"].state.code} if r["city"] else None,
+            "neighborhoods": [{"name": n.name, "slug": n.slug} for n in r.get("neighborhoods", [])],
             "neighborhood": {"name": r["neighborhood"].name, "slug": r["neighborhood"].slug} if r["neighborhood"] else None,
         }
 

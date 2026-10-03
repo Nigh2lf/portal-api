@@ -11,6 +11,7 @@ from public.services.scope import city_ids, visible_properties, with_card_data
 PURPOSE_PRICE_FIELD = {"SALE": "sale_price", "RENT": "rent_price", "SEASONAL": "seasonal_rent_price"}
 ORDERINGS = {"recent": "-updated_at", "price_asc": "price_value", "price_desc": "-price_value"}
 MAX_PAGE_SIZE = 60
+MAX_NEIGHBORHOODS = 20
 
 
 @dataclass
@@ -18,7 +19,7 @@ class SearchFilters:
     purpose: str = "SALE"
     property_type: str | None = None
     city: str | None = None
-    neighborhood: str | None = None
+    neighborhoods: list[str] = field(default_factory=list)
     condominium: str | None = None
     bedrooms: list[int] = field(default_factory=list)
     parking: int | None = None
@@ -68,11 +69,18 @@ class SearchFilters:
             if parte.isdigit() and 1 <= int(parte) <= 4:
                 bedrooms.append(int(parte))
         page_size = inteiro("page_size", 1) or default_page_size
+        bairros = []
+        for parte in str(params.get("neighborhood") or "").split(","):
+            parte = parte.strip()
+            if parte and parte not in bairros:
+                bairros.append(parte)
+        if len(bairros) > MAX_NEIGHBORHOODS:
+            raise ValidationError({"neighborhood": [f"Escolha no máximo {MAX_NEIGHBORHOODS} bairros."]})
         return cls(
             purpose=purpose,
             property_type=params.get("property_type") or None,
             city=params.get("city") or None,
-            neighborhood=params.get("neighborhood") or None,
+            neighborhoods=bairros,
             condominium=condominium,
             bedrooms=sorted(set(bedrooms)),
             parking=inteiro("parking", 1),
@@ -91,11 +99,11 @@ class SearchService:
         self.portal = portal
 
     def resolve(self, filters: SearchFilters):
-        """Resolve os slugs dos filtros em registros (ou None quando não existem)."""
+        """Resolve os slugs dos filtros em registros (ou None / lista vazia quando não existem)."""
         city = City.objects.filter(slug=filters.city).select_related("state").first() if filters.city else None
-        neighborhood = None
-        if filters.neighborhood:
-            qs = Neighborhood.objects.filter(slug=filters.neighborhood).select_related("city", "city__state")
+        neighborhoods = []
+        if filters.neighborhoods:
+            qs = Neighborhood.objects.filter(slug__in=filters.neighborhoods).select_related("city", "city__state")
             if city:
                 qs = qs.filter(city=city)
             else:
@@ -103,11 +111,20 @@ class SearchService:
                 qs = qs.filter(city__in=city_ids(self.portal)).order_by(
                     Case(When(city_id=self.portal.main_city_id, then=Value(0)), default=Value(1), output_field=IntegerField())
                 )
-            neighborhood = qs.first()
-            if neighborhood and city is None:
-                city = neighborhood.city
+            por_slug = {}
+            for n in qs:
+                por_slug.setdefault(n.slug, n)
+            neighborhoods = [por_slug[s] for s in filters.neighborhoods if s in por_slug]
+            cidades = {n.city_id for n in neighborhoods}
+            if city is None and len(cidades) == 1:
+                city = neighborhoods[0].city
         property_type = PropertyType.objects.filter(slug=filters.property_type).first() if filters.property_type else None
-        return {"city": city, "neighborhood": neighborhood, "property_type": property_type}
+        return {
+            "city": city,
+            "neighborhoods": neighborhoods,
+            "neighborhood": neighborhoods[0] if len(neighborhoods) == 1 else None,
+            "property_type": property_type,
+        }
 
     def base_queryset(self, filters: SearchFilters, resolved):
         """Filtros que não dependem do objetivo (usados também nos contadores das abas)."""
@@ -116,8 +133,8 @@ class SearchService:
             qs = qs.filter(property_type=resolved["property_type"]) if resolved["property_type"] else qs.none()
         if filters.city:
             qs = qs.filter(city=resolved["city"]) if resolved["city"] else qs.none()
-        if filters.neighborhood:
-            qs = qs.filter(neighborhood=resolved["neighborhood"]) if resolved["neighborhood"] else qs.none()
+        if filters.neighborhoods:
+            qs = qs.filter(neighborhood__in=resolved["neighborhoods"]) if resolved["neighborhoods"] else qs.none()
         if filters.advertiser:
             qs = qs.filter(advertiser__slug=filters.advertiser)
         if filters.condominium == "inside":
