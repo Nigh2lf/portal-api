@@ -4,6 +4,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from core.classes.base_viewset import BaseViewSet
 from core.classes.exception_handler import envelope_success
 from core.models import AdPlacement, Plan
+from core.services.public_cache import cached
 from public.modules.plan.serializer import PublicAdPlacementSerializer, PublicPlanSerializer
 
 
@@ -21,8 +22,8 @@ class PublicPlanViewSet(BaseViewSet):
         Returns:
             envelope com `[{id, slug, name, monthly_price, property_limit, ...}]`
         """
-        qs = Plan.objects.filter(is_active=True).order_by("sort_order", "name")
-        return envelope_success(data=PublicPlanSerializer(qs, many=True).data)
+        dados = cached("plans", lambda: PublicPlanSerializer(Plan.objects.filter(is_active=True).order_by("sort_order", "name"), many=True).data, params={"view": "plans"})
+        return envelope_success(data=dados)
 
 
 class PublicAdPlacementViewSet(BaseViewSet):
@@ -39,5 +40,5 @@ class PublicAdPlacementViewSet(BaseViewSet):
         Returns:
             envelope com `[{code, name, page, kind, width, height, monthly_price, notes}]`
         """
-        qs = AdPlacement.objects.filter(is_active=True).order_by("code")
-        return envelope_success(data=PublicAdPlacementSerializer(qs, many=True).data)
+        dados = cached("plans", lambda: PublicAdPlacementSerializer(AdPlacement.objects.filter(is_active=True).order_by("code"), many=True).data, params={"view": "ad-placements"})
+        return envelope_success(data=dados)

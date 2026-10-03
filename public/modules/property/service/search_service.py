@@ -5,6 +5,7 @@ from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
 from rest_framework.exceptions import ValidationError
 
 from core.models import City, Neighborhood, Portal, Property, PropertyType, SearchLog
+from core.services.deferred_writes import defer
 from public.services.scope import city_ids, visible_properties, with_card_data
 
 PURPOSE_PRICE_FIELD = {"SALE": "sale_price", "RENT": "rent_price", "SEASONAL": "seasonal_rent_price"}
@@ -177,7 +178,8 @@ class SearchService:
         """Alimenta "mais procurados"; só na primeira página, para não inflar com paginação."""
         if filters.page != 1:
             return
-        SearchLog.objects.create(
+        defer(
+            SearchLog.objects.create,
             portal=self.portal,
             purpose=filters.purpose,
             property_type=resolved["property_type"],

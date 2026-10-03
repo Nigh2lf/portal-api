@@ -104,11 +104,12 @@ class LogRequestAdmin(admin.ModelAdmin):
         "method",
         "path",
         "status_code",
+        "cache_status",
         "execution_time",
         "user_email",
         "ip",
     )
-    list_filter = ("method", "status_code")
+    list_filter = ("method", "status_code", "cache_status")
     search_fields = ("path", "ip", "user_agent", "user_email")
     readonly_fields = (
         "id",
@@ -122,6 +123,7 @@ class LogRequestAdmin(admin.ModelAdmin):
         "params",
         "user_agent",
         "curl",
+        "cache_status",
         "user",
         "user_email",
         "created_at",

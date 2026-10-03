@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 import os
+import tempfile
 from datetime import timedelta
 from pathlib import Path
 
@@ -218,6 +219,9 @@ DATABASES = {
         "PASSWORD": os.getenv("DB_PASSWORD"),
         "HOST": os.getenv("DB_HOST"),
         "PORT": os.getenv("DB_PORT"),
+        # Reaproveita a conexão entre requisições: abrir uma nova com o banco remoto custa ~2s.
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+        "CONN_HEALTH_CHECKS": env_bool("DB_CONN_HEALTH_CHECKS", default=True),
     }
 }
 
@@ -336,6 +340,7 @@ LOG_REQUESTS_EXCLUDE_PATHS = [
     ).split(",")
     if p.strip()
 ]
+LOG_REQUESTS_SKIP_READ_PATHS = env_list("LOG_REQUESTS_SKIP_READ_PATHS", default=[])
 
 # ---------------------------------------------------------------------------
 # Auditoria de mudanças em models (CREATE/UPDATE/DELETE -> LogModelChange)
@@ -358,6 +363,29 @@ BREVO_API_URL = os.getenv("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email"
 EMAIL_API_TIMEOUT = int(os.getenv("EMAIL_API_TIMEOUT", "10"))
 
 # ---------------------------------------------------------------------------
+# Cache das respostas públicas (core/services/public_cache.py).
+# Dados em memória do processo; versões em arquivo local, compartilhado pelos workers
+# do mesmo container. Para Redis, troque os dois BACKEND/LOCATION por django_redis.
+CACHES = {
+    "default": {
+        "BACKEND": os.getenv("CACHE_BACKEND", "django.core.cache.backends.locmem.LocMemCache"),
+        "LOCATION": os.getenv("CACHE_LOCATION", "portal-api"),
+        "TIMEOUT": int(os.getenv("CACHE_DEFAULT_TIMEOUT", "600")),
+        "OPTIONS": {"MAX_ENTRIES": int(os.getenv("CACHE_MAX_ENTRIES", "5000"))},
+    },
+    "cache_versions": {
+        "BACKEND": os.getenv("CACHE_VERSIONS_BACKEND", "django.core.cache.backends.filebased.FileBasedCache"),
+        "LOCATION": os.getenv("CACHE_VERSIONS_LOCATION", str(Path(tempfile.gettempdir()) / "portal-api-cache-versions")),
+        "TIMEOUT": None,
+    },
+}
+PUBLIC_CACHE_ENABLED = env_bool("PUBLIC_CACHE_ENABLED", default=True)
+# Estatísticas do site (SearchLog, PropertyView) gravadas numa thread de fundo (core/services/deferred_writes.py).
+DEFERRED_WRITES_ENABLED = env_bool("DEFERRED_WRITES_ENABLED", default=True)
+SITE_REVALIDATE_URL = os.getenv("SITE_REVALIDATE_URL", "")
+SITE_REVALIDATE_SECRET = os.getenv("SITE_REVALIDATE_SECRET", "")
+SITE_REVALIDATE_TIMEOUT = int(os.getenv("SITE_REVALIDATE_TIMEOUT", "5"))
+
 # CEP — ViaCEP direto, com cache na tabela PostalCode
 # ---------------------------------------------------------------------------
 VIACEP_URL = os.getenv("VIACEP_URL", "https://viacep.com.br/ws/{cep}/json/")

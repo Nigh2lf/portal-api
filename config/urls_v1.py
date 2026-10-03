@@ -34,6 +34,7 @@ from core.views import (
     PropertyTypeViewSet,
     PropertyViewSet,
     PublicAssetViewSet,
+    PublicCacheViewSet,
     RejectedPropertyViewSet,
     ScheduledTaskRunViewSet,
     StateViewSet,
@@ -77,6 +78,7 @@ router.register(r"property-requests", PropertyRequestViewSet, basename="property
 router.register(r"advertiser-leads", AdvertiserLeadViewSet, basename="advertiser-lead")
 router.register(r"xml-import-runs", XmlImportRunViewSet, basename="xml-import-run")
 router.register(r"scheduled-task-runs", ScheduledTaskRunViewSet, basename="scheduled-task-run")
+router.register(r"public-cache", PublicCacheViewSet, basename="public-cache")
 
 
 urlpatterns = [

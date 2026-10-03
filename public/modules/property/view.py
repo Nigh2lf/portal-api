@@ -6,7 +6,9 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from core.classes.base_viewset import BaseViewSet
 from core.classes.exception_handler import envelope_success
-from core.models import Advertiser, Portal, Property, PropertyContactClick, PropertyInquiry, PropertyView
+from core.models import Advertiser, Property, PropertyContactClick, PropertyInquiry, PropertyView
+from core.services.deferred_writes import defer
+from core.services.public_cache import cached
 from public.modules.portal.serializer import PublicPropertyCardSerializer
 from public.modules.property.serializer import (
     PublicContactClickSerializer,
@@ -15,7 +17,7 @@ from public.modules.property.serializer import (
     PublicSearchResultSerializer,
 )
 from public.modules.property.service import PURPOSE_PRICE_FIELD, SearchFilters, SearchService
-from public.services.scope import property_visibility_q, visible_properties, with_card_data
+from public.services.scope import cached_portal, property_visibility_q, visible_properties, with_card_data
 from public.services.sender import client_ip, ensure_sender_allowed
 
 MAX_IDS = 100
@@ -35,7 +37,7 @@ class PublicPropertyViewSet(BaseViewSet):
     lookup_value_regex = r"[a-z0-9-]+"
 
     def get_portal(self):
-        portal = Portal.objects.filter(slug=self.kwargs.get("portal_slug"), is_active=True).first()
+        portal = cached_portal(self.kwargs.get("portal_slug"))
         if portal is None:
             raise NotFound("Portal não encontrado.")
         return portal
@@ -50,10 +52,16 @@ class PublicPropertyViewSet(BaseViewSet):
         portal = self.get_portal()
         filters = SearchFilters.from_query(request.query_params, default_page_size=portal.results_per_page or 30)
         service = SearchService(portal)
-        resultado = service.search(filters)
+        params = {k: request.query_params.getlist(k) for k in sorted(request.query_params) if k != "track"}
+
+        def montar():
+            resultado = service.search(filters)
+            return {"data": PublicSearchResultSerializer(resultado, context={"request": request}).data, "applied": resultado["applied"]}
+
+        r = cached("listing", montar, portal=portal.slug, params={"view": "search", **params})
         if request.query_params.get("track", "1") != "0":
-            service.log(filters, resultado["applied"], request)
-        return envelope_success(data=PublicSearchResultSerializer(resultado, context={"request": request}).data)
+            service.log(filters, r["applied"], request)
+        return envelope_success(data=r["data"])
 
     def retrieve(self, request, portal_slug=None, slug=None):
         """
@@ -63,30 +71,47 @@ class PublicPropertyViewSet(BaseViewSet):
             envelope com `{property, related, related_links}`; 404 se não visível no portal
         """
         portal = self.get_portal()
-        qs = with_card_data(visible_properties(portal)).select_related("advertiser", "advertiser__portal").prefetch_related("fees")
-        prop = qs.filter(Q(slug=slug) | Q(reference_code__iexact=slug)).first()
-        if prop is None:
-            raise NotFound("Imóvel não encontrado.")
-        self._annotate_advertiser_totals(prop.advertiser, portal)
+        chave = (slug or "").lower()
+        r = cached("listing", lambda: self._detail_payload(portal, slug), portal=portal.slug, item=chave, params={"view": "detail"})
         if request.query_params.get("track", "1") != "0":
-            PropertyView.objects.create(
-                property=prop,
-                property_reference_code=prop.reference_code,
-                advertiser=prop.advertiser,
+            defer(
+                PropertyView.objects.create,
+                property_id=r["track"]["property_id"],
+                property_reference_code=r["track"]["reference_code"],
+                advertiser_id=r["track"]["advertiser_id"],
                 portal=portal,
                 ip_address=client_ip(request),
                 referer=(request.META.get("HTTP_REFERER") or "")[:2000],
                 is_mobile=is_mobile(request),
             )
-        service = SearchService(portal)
-        related = service.related(prop)
-        return envelope_success(
-            data={
-                "property": PublicPropertyDetailSerializer(prop, context={"request": request}).data,
-                "related": PublicPropertyCardSerializer(related, many=True, context={"request": request}).data,
+        return envelope_success(data=r["data"])
+
+    def _detail_payload(self, portal, slug):
+        """
+        Monta o detalhe do imóvel e os dados mínimos para registrar a visualização
+
+        Args:
+            portal: portal da requisição
+            slug: slug ou código do imóvel
+
+        Returns:
+            ``{"data": {property, related, related_links}, "track": {property_id, reference_code, advertiser_id}}``
+        """
+        qs = with_card_data(visible_properties(portal)).select_related("advertiser", "advertiser__portal").prefetch_related("fees")
+        prop = qs.filter(Q(slug=slug) | Q(reference_code__iexact=slug)).first()
+        if prop is None:
+            raise NotFound("Imóvel não encontrado.")
+        self._annotate_advertiser_totals(prop.advertiser, portal)
+        related = SearchService(portal).related(prop)
+        ctx = {"request": self.request}
+        return {
+            "data": {
+                "property": PublicPropertyDetailSerializer(prop, context=ctx).data,
+                "related": PublicPropertyCardSerializer(related, many=True, context=ctx).data,
                 "related_links": self._related_links(prop),
-            }
-        )
+            },
+            "track": {"property_id": prop.pk, "reference_code": prop.reference_code, "advertiser_id": prop.advertiser_id},
+        }
 
     @action(detail=False, methods=["get"], url_path="by-ids")
     def by_ids(self, request, portal_slug=None):
@@ -100,10 +125,13 @@ class PublicPropertyViewSet(BaseViewSet):
         ids = [i.strip() for i in (request.query_params.get("ids") or "").split(",") if i.strip()][:MAX_IDS]
         if not ids:
             return envelope_success(data=[])
-        qs = with_card_data(visible_properties(portal).filter(pk__in=ids))
-        por_id = {str(p.pk): p for p in qs}
-        ordenados = [por_id[i] for i in ids if i in por_id]
-        return envelope_success(data=PublicPropertyCardSerializer(ordenados, many=True, context={"request": request}).data)
+
+        def montar():
+            por_id = {str(p.pk): p for p in with_card_data(visible_properties(portal).filter(pk__in=ids))}
+            ordenados = [por_id[i] for i in ids if i in por_id]
+            return PublicPropertyCardSerializer(ordenados, many=True, context={"request": request}).data
+
+        return envelope_success(data=cached("listing", montar, portal=portal.slug, params={"view": "by-ids", "ids": ids}))
 
     @action(detail=False, methods=["post"], url_path="inquiries")
     def inquiries(self, request, portal_slug=None):

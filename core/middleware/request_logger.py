@@ -12,6 +12,11 @@ Configuração (todas opcionais, com defaults sãos):
 - ``LOG_REQUESTS_ENABLED`` (bool, default ``True``) — desliga o middleware.
 - ``LOG_REQUESTS_EXCLUDE_PATHS`` (list[str], default lista abaixo) —
   prefixos de URL que **não** são logados (admin, static, health, schema).
+- ``LOG_REQUESTS_SKIP_READ_PATHS`` (list[str], default vazio) — prefixos cujos
+  GET/HEAD não são logados (escritas continuam).
+
+Cada log grava ``cache_status`` (HIT/MISS do cache público) e a resposta leva o
+header ``X-Cache``. A gravação vai para ``core.services.deferred_writes``.
 - ``LOG_REQUESTS_MAX_BODY`` (int, default ``10_000``) — bytes máximos do body
   parseado. Acima disso o body vira ``"<truncated>"``.
 - ``LOG_REQUESTS_RETENTION_DAYS`` (int, default ``30``) — usado pelo cron
@@ -100,9 +105,13 @@ def _build_curl(request, body) -> str | None:
         return None
 
 
-def _is_excluded(path: str) -> bool:
+def _is_excluded(path: str, method: str = "GET") -> bool:
     excludes = getattr(settings, "LOG_REQUESTS_EXCLUDE_PATHS", _DEFAULT_EXCLUDES)
-    return any(path.startswith(prefix) for prefix in excludes)
+    if any(path.startswith(prefix) for prefix in excludes):
+        return True
+    if method in ("GET", "HEAD"):
+        return any(path.startswith(prefix) for prefix in getattr(settings, "LOG_REQUESTS_SKIP_READ_PATHS", ()))
+    return False
 
 
 class RequestLoggerMiddleware(MiddlewareMixin):
@@ -118,9 +127,12 @@ class RequestLoggerMiddleware(MiddlewareMixin):
             return self.get_response(request)
 
         path_only = request.path
-        if _is_excluded(path_only):
+        if _is_excluded(path_only, request.method):
             return self.get_response(request)
 
+        from core.services import public_cache
+
+        tracking = public_cache.start_tracking()
         start_time = time.monotonic()
         max_body = int(getattr(settings, "LOG_REQUESTS_MAX_BODY", 10_000))
         body_payload: Any = None
@@ -142,10 +154,16 @@ class RequestLoggerMiddleware(MiddlewareMixin):
 
         curl_command = _build_curl(request, body_payload)
 
-        response = self.get_response(request)
+        try:
+            response = self.get_response(request)
+        finally:
+            cache_status = public_cache.stop_tracking(tracking)
+        if cache_status:
+            response["X-Cache"] = cache_status
 
         try:
             from core.models import LogRequest
+            from core.services.deferred_writes import defer
 
             params_json = ""
             try:
@@ -173,7 +191,9 @@ class RequestLoggerMiddleware(MiddlewareMixin):
                 user_fk = None
                 user_email = ""
 
-            LogRequest.objects.create(
+            # Gravado na thread de fundo: o log não pode deixar a resposta esperando o banco.
+            defer(
+                LogRequest.objects.create,
                 timestamp=now(),
                 method=request.method,
                 path=path_only,
@@ -186,6 +206,7 @@ class RequestLoggerMiddleware(MiddlewareMixin):
                 curl=curl_command,
                 user=user_fk,
                 user_email=user_email,
+                cache_status=cache_status,
             )
         except Exception:  # noqa: BLE001 - log nunca pode quebrar a request
             logger.exception("RequestLoggerMiddleware falhou ao persistir log")

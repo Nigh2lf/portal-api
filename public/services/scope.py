@@ -2,7 +2,25 @@
 
 from django.db.models import Count, Prefetch, Q
 
-from core.models import Advertiser, Portal, Property, PropertyPhoto
+from core.models import Advertiser, Portal, PortalCity, Property, PropertyPhoto
+from core.services.public_cache import cached
+
+
+def portal_queryset():
+    return (
+        Portal.objects.filter(is_active=True)
+        .select_related("main_city", "main_city__state")
+        .prefetch_related(
+            Prefetch("portal_cities", queryset=PortalCity.objects.select_related("city", "city__state").order_by("sort_order")),
+            "combined_portals",
+            "menu_items",
+        )
+    )
+
+
+def cached_portal(slug):
+    """Portal ativo pelo slug (com cidades e menus pré-carregados), em cache; ``None`` se não existir."""
+    return cached("portal", lambda: portal_queryset().filter(slug=slug).first(), portal=slug, params={"view": "object"})
 
 
 def portal_ids(portal: Portal):

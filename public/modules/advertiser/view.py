@@ -1,3 +1,5 @@
+import random
+
 from django.db.models import Count, Q
 from rest_framework.exceptions import NotFound
 from rest_framework.permissions import AllowAny
@@ -5,9 +7,10 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from core.classes.base_viewset import BaseViewSet
 from core.classes.exception_handler import envelope_success
-from core.models import Advertiser, Portal
+from core.models import Advertiser
+from core.services.public_cache import cached
 from public.modules.property.serializer import PublicAdvertiserSerializer
-from public.services.scope import property_visibility_q, visible_advertisers
+from public.services.scope import cached_portal, property_visibility_q, visible_advertisers
 
 
 class PublicAdvertiserViewSet(BaseViewSet):
@@ -20,7 +23,7 @@ class PublicAdvertiserViewSet(BaseViewSet):
     lookup_value_regex = r"[a-z0-9-]+"
 
     def get_portal(self):
-        portal = Portal.objects.filter(slug=self.kwargs.get("portal_slug"), is_active=True).first()
+        portal = cached_portal(self.kwargs.get("portal_slug"))
         if portal is None:
             raise NotFound("Portal não encontrado.")
         return portal
@@ -42,15 +45,20 @@ class PublicAdvertiserViewSet(BaseViewSet):
             envelope com `{agencies: [...], brokers: [...]}`
         """
         portal = self.get_portal()
-        qs = self._with_totals(visible_advertisers(portal).filter(has_realtor_page=True), portal).order_by("?")
-        itens = list(qs)
-        ctx = {"request": request}
-        return envelope_success(
-            data={
-                "agencies": PublicAdvertiserSerializer([a for a in itens if a.type == Advertiser.Type.AGENCY], many=True, context=ctx).data,
-                "brokers": PublicAdvertiserSerializer([a for a in itens if a.type == Advertiser.Type.BROKER], many=True, context=ctx).data,
+
+        def montar():
+            itens = list(self._with_totals(visible_advertisers(portal).filter(has_realtor_page=True), portal))
+            ctx = {"request": request}
+            return {
+                "agencies": list(PublicAdvertiserSerializer([a for a in itens if a.type == Advertiser.Type.AGENCY], many=True, context=ctx).data),
+                "brokers": list(PublicAdvertiserSerializer([a for a in itens if a.type == Advertiser.Type.BROKER], many=True, context=ctx).data),
             }
-        )
+
+        dados = cached("advertiser", montar, portal=portal.slug, params={"view": "list"})
+        # A ordem aleatória (rodízio entre anunciantes) é aplicada a cada requisição, fora do cache.
+        random.shuffle(dados["agencies"])
+        random.shuffle(dados["brokers"])
+        return envelope_success(data=dados)
 
     def retrieve(self, request, portal_slug=None, slug=None):
         """
@@ -60,7 +68,11 @@ class PublicAdvertiserViewSet(BaseViewSet):
             envelope com o bloco público do anunciante e totais por objetivo
         """
         portal = self.get_portal()
-        a = self._with_totals(visible_advertisers(portal).filter(slug=slug, has_hotsite=True), portal).first()
-        if a is None:
-            raise NotFound("Anunciante não encontrado.")
-        return envelope_success(data=PublicAdvertiserSerializer(a, context={"request": request}).data)
+
+        def montar():
+            a = self._with_totals(visible_advertisers(portal).filter(slug=slug, has_hotsite=True), portal).first()
+            if a is None:
+                raise NotFound("Anunciante não encontrado.")
+            return PublicAdvertiserSerializer(a, context={"request": request}).data
+
+        return envelope_success(data=cached("advertiser", montar, portal=portal.slug, params={"view": "detail", "slug": slug}))

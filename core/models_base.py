@@ -156,6 +156,12 @@ class LogRequest(models.Model):
         related_name="request_logs",
     )
     user_email = models.CharField(max_length=255, blank=True, default="")
+    cache_status = models.CharField(
+        max_length=4,
+        blank=True,
+        default="",
+        help_text="HIT quando todo o cache público consultado na request acertou, MISS se algum foi ao banco, vazio se não usou cache.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -166,6 +172,7 @@ class LogRequest(models.Model):
             models.Index(fields=["-created_at"]),
             models.Index(fields=["status_code"]),
             models.Index(fields=["method"]),
+            models.Index(fields=["cache_status"]),
         ]
 
     def __str__(self):

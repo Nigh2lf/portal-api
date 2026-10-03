@@ -50,6 +50,7 @@ from core.models import (
 from core.modules.property.service.property_service import PropertyService
 from core.services import grant_advertiser_access, unique_slug
 from core.services.images import download, ensure_cover_thumbnail
+from core.services.public_cache import invalidation_batch
 
 LEGACY_FILES_BASE = "https://www.petropolisimoveis.com/"
 
@@ -185,16 +186,17 @@ class Command(BaseCommand):
         self.skip_photos = options["skip_photos"]
         self.stats = {}
 
-        self.import_states()
-        self.import_cities()
-        self.import_neighborhoods()
-        self.import_property_types()
-        self.import_features()
-        self.import_plans()
-        self.import_integrators()
-        self.import_portals()
-        advertiser, senha = self.import_advertiser(options["client_id"], options["password"])
-        self.import_properties(advertiser, options["limit"])
+        with invalidation_batch(user="import_legacy"):
+            self.import_states()
+            self.import_cities()
+            self.import_neighborhoods()
+            self.import_property_types()
+            self.import_features()
+            self.import_plans()
+            self.import_integrators()
+            self.import_portals()
+            advertiser, senha = self.import_advertiser(options["client_id"], options["password"])
+            self.import_properties(advertiser, options["limit"])
 
         self.stdout.write(self.style.SUCCESS("\nResumo:"))
         for nome, valor in self.stats.items():

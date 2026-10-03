@@ -5,9 +5,10 @@ from rest_framework.throttling import ScopedRateThrottle
 from core.classes.base_viewset import BaseViewSet
 from core.classes.exception_handler import envelope_success
 from core.classes.pagination import StandardPagination
-from core.models import Portal
+from core.services.public_cache import cached
 from public.modules.content.serializer import PublicPostDetailSerializer, PublicPostListSerializer, PublicTipSerializer
 from public.modules.content.service import ContentService
+from public.services.scope import cached_portal
 
 POSTS_PAGE_SIZE = 9
 
@@ -18,7 +19,7 @@ class PublicPostPagination(StandardPagination):
 
 class PublicContentMixin:
     def get_portal(self):
-        portal = Portal.objects.filter(slug=self.kwargs.get("portal_slug"), is_active=True).first()
+        portal = cached_portal(self.kwargs.get("portal_slug"))
         if portal is None:
             raise NotFound("Portal não encontrado.")
         return portal
@@ -42,10 +43,15 @@ class PublicPostViewSet(PublicContentMixin, BaseViewSet):
             envelope com `{count, total_pages, page, page_size, next, previous, results}`
         """
         portal = self.get_portal()
-        paginator = self.pagination_class()
-        page = paginator.paginate_queryset(ContentService(portal).posts(), request, view=self)
-        dados = PublicPostListSerializer(page, many=True, context={"request": request}).data
-        return envelope_success(data=paginator.get_paginated_response(dados).data)
+
+        def montar():
+            paginator = self.pagination_class()
+            page = paginator.paginate_queryset(ContentService(portal).posts(), request, view=self)
+            dados = PublicPostListSerializer(page, many=True, context={"request": request}).data
+            return paginator.get_paginated_response(dados).data
+
+        params = {"view": "posts", "page": request.query_params.get("page"), "page_size": request.query_params.get("page_size")}
+        return envelope_success(data=cached("content", montar, portal=portal.slug, params=params))
 
     def retrieve(self, request, portal_slug=None, slug=None):
         """
@@ -55,10 +61,14 @@ class PublicPostViewSet(PublicContentMixin, BaseViewSet):
             envelope com o post; 404 se não publicado ou fora do escopo do portal
         """
         portal = self.get_portal()
-        post = ContentService(portal).post_by_slug(slug)
-        if post is None:
-            raise NotFound("Post não encontrado.")
-        return envelope_success(data=PublicPostDetailSerializer(post, context={"request": request}).data)
+
+        def montar():
+            post = ContentService(portal).post_by_slug(slug)
+            if post is None:
+                raise NotFound("Post não encontrado.")
+            return PublicPostDetailSerializer(post, context={"request": request}).data
+
+        return envelope_success(data=cached("content", montar, portal=portal.slug, params={"view": "post", "slug": slug}))
 
 
 class PublicTipViewSet(PublicContentMixin, BaseViewSet):
@@ -76,4 +86,5 @@ class PublicTipViewSet(PublicContentMixin, BaseViewSet):
             envelope com `[{id, title, body, sort_order}]`
         """
         portal = self.get_portal()
-        return envelope_success(data=PublicTipSerializer(ContentService(portal).tips(), many=True).data)
+        dados = cached("content", lambda: PublicTipSerializer(ContentService(portal).tips(), many=True).data, portal=portal.slug, params={"view": "tips"})
+        return envelope_success(data=dados)

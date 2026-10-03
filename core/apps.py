@@ -19,6 +19,10 @@ class CoreConfig(AppConfig):
 
             scheduler.start()
 
+        from core import signals_public_cache
+
+        signals_public_cache.connect()
+
         # Auditoria de mudanças em models (CREATE/UPDATE/DELETE).
         if getattr(settings, "MODEL_AUDIT_ENABLED", False):
             from core import signals_audit

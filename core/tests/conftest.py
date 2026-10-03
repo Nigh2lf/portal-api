@@ -9,6 +9,14 @@ from rest_framework.test import APIClient
 User = get_user_model()
 
 
+@pytest.fixture(autouse=True)
+def _sem_cache_publico(settings):
+    """Cache público, fila de estatísticas e aviso ao site desligados: cada teste vê o banco direto."""
+    settings.PUBLIC_CACHE_ENABLED = False
+    settings.DEFERRED_WRITES_ENABLED = False
+    settings.SITE_REVALIDATE_URL = ""
+
+
 @pytest.fixture
 def api_client() -> APIClient:
     """Cliente DRF sem autenticação."""

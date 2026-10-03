@@ -1,4 +1,3 @@
-from django.db.models import Prefetch
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import AllowAny
@@ -6,7 +5,8 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from core.classes.base_viewset import BaseViewSet
 from core.classes.exception_handler import envelope_success
-from core.models import Ad, AdClick, AdPlacement, Portal, PortalCity
+from core.models import Ad, AdClick, AdPlacement, Portal
+from core.services.public_cache import cached
 from public.modules.portal.serializer import (
     PublicAdSerializer,
     PublicBannerSerializer,
@@ -19,6 +19,7 @@ from public.modules.portal.serializer import (
     PublicPropertyTypeSerializer,
 )
 from public.modules.portal.service import HomeService
+from public.services.scope import cached_portal, portal_queryset
 
 MAX_LIMIT = 50
 
@@ -33,25 +34,30 @@ class PublicPortalViewSet(BaseViewSet):
     lookup_value_regex = r"[a-z0-9-]+"
 
     def get_queryset(self):
-        return (
-            Portal.objects.filter(is_active=True)
-            .select_related("main_city", "main_city__state")
-            .prefetch_related(
-                Prefetch("portal_cities", queryset=PortalCity.objects.select_related("city", "city__state").order_by("sort_order")),
-                "combined_portals",
-                "menu_items",
-            )
-        )
+        return portal_queryset()
 
     def get_portal(self, slug):
-        portal = self.get_queryset().filter(slug=slug).first()
+        portal = cached_portal(slug)
         if portal is None:
             raise NotFound("Portal não encontrado.")
         return portal
 
-    def _portal_payload(self, portal):
-        portal.total_properties = HomeService(portal).total_properties()
-        return PublicPortalSerializer(portal, context={"request": self.request}).data
+    def _portal_payload(self, slug):
+        portal = self.get_portal(slug)
+
+        def montar():
+            portal.total_properties = HomeService(portal).total_properties()
+            return PublicPortalSerializer(portal, context={"request": self.request}).data
+
+        return cached("portal", montar, portal=slug, params={"view": "detail"})
+
+    @staticmethod
+    def _slug_by_host(host):
+        for portal in Portal.objects.filter(is_active=True).only("slug", "domain", "extra_domains"):
+            dominios = {portal.domain.lower(), *(d.lower() for d in portal.extra_domains or [])}
+            if host in dominios:
+                return portal.slug
+        return None
 
     def _limit(self, default, maximo=MAX_LIMIT):
         try:
@@ -67,7 +73,8 @@ class PublicPortalViewSet(BaseViewSet):
         Returns:
             envelope com `[{id, slug, name, domain}]`
         """
-        return envelope_success(data=PublicPortalListSerializer(self.get_queryset(), many=True).data)
+        dados = cached("portal", lambda: PublicPortalListSerializer(Portal.objects.filter(is_active=True), many=True).data, params={"view": "list"})
+        return envelope_success(data=dados)
 
     def retrieve(self, request, slug=None):
         """
@@ -76,7 +83,7 @@ class PublicPortalViewSet(BaseViewSet):
         Returns:
             envelope com os dados do portal e `total_properties`
         """
-        return envelope_success(data=self._portal_payload(self.get_portal(slug)))
+        return envelope_success(data=self._portal_payload(slug))
 
     @action(detail=False, methods=["get"], url_path="by-host")
     def by_host(self, request):
@@ -89,11 +96,10 @@ class PublicPortalViewSet(BaseViewSet):
         host = (request.query_params.get("host") or "").lower().split(":")[0]
         if not host:
             raise ValidationError({"host": ["Informe o host."]})
-        for portal in self.get_queryset():
-            dominios = {portal.domain.lower(), *(d.lower() for d in portal.extra_domains or [])}
-            if host in dominios:
-                return envelope_success(data=self._portal_payload(portal))
-        raise NotFound("Nenhum portal para este host.")
+        slug = cached("portal", lambda: self._slug_by_host(host), params={"view": "by-host", "host": host})
+        if slug is None:
+            raise NotFound("Nenhum portal para este host.")
+        return envelope_success(data=self._portal_payload(slug))
 
     @action(detail=True, methods=["get"], url_path="featured-properties")
     def featured_properties(self, request, slug=None):
@@ -104,8 +110,14 @@ class PublicPortalViewSet(BaseViewSet):
             envelope com cards de imóvel
         """
         portal = self.get_portal(slug)
-        itens = HomeService(portal).featured(limit=self._limit(12))
-        return envelope_success(data=PublicPropertyCardSerializer(itens, many=True, context={"request": request}).data)
+        limit = self._limit(12)
+        dados = cached(
+            "home",
+            lambda: PublicPropertyCardSerializer(HomeService(portal).featured(limit=limit), many=True, context={"request": request}).data,
+            portal=slug,
+            params={"view": "featured", "limit": limit},
+        )
+        return envelope_success(data=dados)
 
     @action(detail=True, methods=["get"], url_path="top-searches")
     def top_searches(self, request, slug=None):
@@ -116,7 +128,9 @@ class PublicPortalViewSet(BaseViewSet):
             envelope com `[{purpose, property_type, city, neighborhood, total}]`
         """
         portal = self.get_portal(slug)
-        return envelope_success(data=HomeService(portal).top_searches(limit=self._limit(15)))
+        limit = self._limit(15)
+        dados = cached("home", lambda: HomeService(portal).top_searches(limit=limit), portal=slug, params={"view": "top-searches", "limit": limit})
+        return envelope_success(data=dados)
 
     @action(detail=True, methods=["get"], url_path="top-neighborhoods")
     def top_neighborhoods(self, request, slug=None):
@@ -127,7 +141,9 @@ class PublicPortalViewSet(BaseViewSet):
             envelope com `[{neighborhood, city, total}]`
         """
         portal = self.get_portal(slug)
-        return envelope_success(data=HomeService(portal).top_neighborhoods(limit=self._limit(15)))
+        limit = self._limit(15)
+        dados = cached("home", lambda: HomeService(portal).top_neighborhoods(limit=limit), portal=slug, params={"view": "top-neighborhoods", "limit": limit})
+        return envelope_success(data=dados)
 
     @action(detail=True, methods=["get"], url_path="banners")
     def banners(self, request, slug=None):
@@ -138,7 +154,13 @@ class PublicPortalViewSet(BaseViewSet):
             envelope com `[{id, home_image_url, inner_image_url}]`
         """
         portal = self.get_portal(slug)
-        return envelope_success(data=PublicBannerSerializer(HomeService(portal).banners(), many=True, context={"request": request}).data)
+        dados = cached(
+            "content",
+            lambda: PublicBannerSerializer(HomeService(portal).banners(), many=True, context={"request": request}).data,
+            portal=slug,
+            params={"view": "banners"},
+        )
+        return envelope_success(data=dados)
 
     @action(detail=True, methods=["get"], url_path="ads")
     def ads(self, request, slug=None):
@@ -155,8 +177,13 @@ class PublicPortalViewSet(BaseViewSet):
             raise ValidationError({"page": ["Valor inválido."]})
         if kind and kind not in AdPlacement.Kind.values:
             raise ValidationError({"kind": ["Valor inválido."]})
-        qs = HomeService(portal).ads(page=page, kind=kind)
-        return envelope_success(data=PublicAdSerializer(qs, many=True, context={"request": request}).data)
+        dados = cached(
+            "content",
+            lambda: PublicAdSerializer(HomeService(portal).ads(page=page, kind=kind), many=True, context={"request": request}).data,
+            portal=slug,
+            params={"view": "ads", "page": page, "kind": kind},
+        )
+        return envelope_success(data=dados)
 
     @action(detail=True, methods=["get"], url_path="ads/(?P<ad_id>[0-9a-f-]{36})/click")
     def ad_click(self, request, slug=None, ad_id=None):
@@ -182,17 +209,19 @@ class PublicPortalViewSet(BaseViewSet):
             envelope com `{property_types, cities, neighborhoods: [{..., total}], features}`
         """
         portal = self.get_portal(slug)
+        return envelope_success(data=cached("catalog", lambda: self._catalog_payload(portal), portal=slug, params={"view": "catalog"}))
+
+    @staticmethod
+    def _catalog_payload(portal):
         dados = HomeService(portal).catalog()
         bairros = []
         for bairro, total in dados["neighborhoods"]:
             item = PublicNeighborhoodSerializer(bairro).data
             item["total"] = total
             bairros.append(item)
-        return envelope_success(
-            data={
-                "property_types": PublicPropertyTypeSerializer(dados["property_types"], many=True).data,
-                "cities": PublicCitySerializer(dados["cities"], many=True).data,
-                "neighborhoods": bairros,
-                "features": PublicFeatureSerializer(dados["features"], many=True).data,
-            }
-        )
+        return {
+            "property_types": PublicPropertyTypeSerializer(dados["property_types"], many=True).data,
+            "cities": PublicCitySerializer(dados["cities"], many=True).data,
+            "neighborhoods": bairros,
+            "features": PublicFeatureSerializer(dados["features"], many=True).data,
+        }
