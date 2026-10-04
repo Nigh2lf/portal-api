@@ -52,11 +52,30 @@ class PublicPortalViewSet(BaseViewSet):
         return cached("portal", montar, portal=slug, params={"view": "detail"})
 
     @staticmethod
-    def _slug_by_host(host):
-        for portal in Portal.objects.filter(is_active=True).only("slug", "domain", "extra_domains"):
-            dominios = {portal.domain.lower(), *(d.lower() for d in portal.extra_domains or [])}
-            if host in dominios:
-                return portal.slug
+    def _normalize_host(host):
+        host = (host or "").strip().lower().split(":")[0]
+        return host[4:] if host.startswith("www.") else host
+
+    @staticmethod
+    def _find_by_host(host):
+        """
+        Portal ativo do host: procura em `domain` e, se não achar, em `extra_domains`
+
+        Args:
+            host: domínio já normalizado (minúsculo, sem `www.` e sem porta)
+
+        Returns:
+            slug do portal ou ``None``
+        """
+        ativos = Portal.objects.filter(is_active=True)
+        variantes = [host, f"www.{host}"]
+        slug = ativos.filter(domain__in=variantes).values_list("slug", flat=True).first()
+        if slug:
+            return slug
+        for variante in variantes:
+            slug = ativos.filter(extra_domains__contains=variante).values_list("slug", flat=True).first()
+            if slug:
+                return slug
         return None
 
     def _limit(self, default, maximo=MAX_LIMIT):
@@ -88,15 +107,15 @@ class PublicPortalViewSet(BaseViewSet):
     @action(detail=False, methods=["get"], url_path="by-host")
     def by_host(self, request):
         """
-        Resolve o portal pelo host da requisição do site (`?host=www.exemplo.com.br`)
+        Resolve o portal pelo host da requisição do site (`?host=www.exemplo.com.br`; ignora `www.` e porta)
 
         Returns:
             envelope com os mesmos dados do retrieve; 404 se nenhum domínio casar
         """
-        host = (request.query_params.get("host") or "").lower().split(":")[0]
+        host = self._normalize_host(request.query_params.get("host"))
         if not host:
             raise ValidationError({"host": ["Informe o host."]})
-        slug = cached("portal", lambda: self._slug_by_host(host), params={"view": "by-host", "host": host})
+        slug = cached("portal", lambda: self._find_by_host(host), params={"view": "by-host", "host": host})
         if slug is None:
             raise NotFound("Nenhum portal para este host.")
         return envelope_success(data=self._portal_payload(slug))

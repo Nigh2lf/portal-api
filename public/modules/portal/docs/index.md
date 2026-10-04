@@ -11,7 +11,7 @@ clique em anúncio.
 |---|---|---|
 | GET | `/api/v1/public/portals/` | Portais ativos: `[{id, slug, name, domain}]` |
 | GET | `/api/v1/public/portals/{slug}/` | Configuração completa do portal |
-| GET | `/api/v1/public/portals/by-host/?host=` | Mesma configuração, resolvida pelo host (`domain` ou `extra_domains`); 404 se não casar |
+| GET | `/api/v1/public/portals/by-host/?host=` | Mesma configuração, resolvida pelo host (`domain` ou `extra_domains`, ignorando `www.` e porta); 404 se não casar. É a rota que o site usa para descobrir o portal |
 | GET | `/api/v1/public/portals/{slug}/featured-properties/?limit=12` | Imóveis em destaque (completa com os mais recentes) |
 | GET | `/api/v1/public/portals/{slug}/top-searches/?limit=15` | Imóveis mais procurados |
 | GET | `/api/v1/public/portals/{slug}/top-neighborhoods/?limit=15` | Bairros mais anunciados |
