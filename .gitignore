@@ -62,3 +62,6 @@ env.bak/
 venv.bak/
 # Variáveis em JSON para colar no Railway (tem segredos)
 .env_json
+
+# Arquivos gerados em runtime (JSON normalizado da importação XML)
+media/

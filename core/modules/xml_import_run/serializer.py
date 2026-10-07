@@ -49,3 +49,17 @@ class XmlImportRunDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+
+class XmlImportStartSerializer(serializers.Serializer):
+    advertiser = serializers.UUIDField()
+    simulate = serializers.BooleanField(default=False)
+
+
+class XmlImportAdvertiserSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    legacy_id = serializers.IntegerField(allow_null=True)
+    integrator = serializers.CharField(source="integration.integrator.name", default=None)
+    xml_url = serializers.CharField(source="integration.xml_url")
+    last_imported_at = serializers.DateTimeField(source="integration.last_imported_at", allow_null=True)

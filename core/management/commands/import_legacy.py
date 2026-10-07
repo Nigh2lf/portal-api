@@ -5,8 +5,14 @@ novos. Idempotente: tudo é casado por ``legacy_id``.
 Uso::
 
     python manage.py import_legacy --client-id 5
-    python manage.py import_legacy --client-id 5 --skip-photos      # sem registrar fotos/miniatura
     python manage.py import_legacy --client-id 5 --password 'Senha@123'
+    python manage.py import_legacy --all                    # todos os clientes do legado
+    python manage.py import_legacy --all --from-client 300  # retoma a partir de um Id_Cliente
+    python manage.py import_legacy --all --skip-logos --skip-photos
+
+Os imóveis entram em lote (poucas consultas por cliente, não por imóvel): com o banco
+remoto, cada consulta custa ~200 ms. As fotos são só links externos; a miniatura da
+capa é gerada depois, à parte, por ``generate_cover_thumbnails``.
 """
 
 from __future__ import annotations
@@ -49,7 +55,7 @@ from core.models import (
 )
 from core.modules.property.service.property_service import PropertyService
 from core.services import grant_advertiser_access, unique_slug
-from core.services.images import download, ensure_cover_thumbnail
+from core.services.images import download
 from core.services.public_cache import invalidation_batch
 
 LEGACY_FILES_BASE = "https://www.petropolisimoveis.com/"
@@ -171,10 +177,14 @@ class Command(BaseCommand):
     help = "Importa catálogos, portais e os imóveis de um anunciante do banco legado (conexão 'legacy')."
 
     def add_arguments(self, parser):
-        parser.add_argument("--client-id", type=int, required=True, help="Id_Cliente no banco legado.")
-        parser.add_argument("--password", help="Senha inicial do usuário do anunciante (gerada se omitida).")
-        parser.add_argument("--skip-photos", action="store_true", help="Não registra as fotos nem gera a miniatura da capa.")
-        parser.add_argument("--limit", type=int, default=0, help="Importa só os N primeiros imóveis (teste).")
+        parser.add_argument("--client-id", type=int, help="Id_Cliente no banco legado.")
+        parser.add_argument("--all", action="store_true", help="Importa todos os clientes do legado e seus imóveis.")
+        parser.add_argument("--from-client", type=int, default=0, help="Com --all: começa deste Id_Cliente (retomar).")
+        parser.add_argument("--to-client", type=int, default=0, help="Com --all: para neste Id_Cliente (0 = até o fim).")
+        parser.add_argument("--password", help="Senha inicial do usuário (só com --client-id; gerada se omitida).")
+        parser.add_argument("--skip-photos", action="store_true", help="Não registra os links das fotos.")
+        parser.add_argument("--skip-logos", action="store_true", help="Não baixa os logos dos anunciantes.")
+        parser.add_argument("--limit", type=int, default=0, help="Importa só os N primeiros imóveis de cada cliente (teste).")
 
     # ------------------------------------------------------------------ infra
     def handle(self, *args, **options):
@@ -183,8 +193,14 @@ class Command(BaseCommand):
             raise CommandError("Banco legado não configurado: defina DB_PORTAL_ANTIGO_* no .env.")
         self.legacy = None
         self.conectar_legado()
+        if not options["client_id"] and not options["all"]:
+            raise CommandError("Informe --client-id ou --all.")
         self.skip_photos = options["skip_photos"]
+        self.skip_logos = options["skip_logos"]
         self.stats = {}
+        self.totais = {"criados": 0, "atualizados": 0, "pulados": 0, "fotos": 0}
+        senha = None
+        advertiser = None
 
         with invalidation_batch(user="import_legacy"):
             self.import_states()
@@ -195,18 +211,80 @@ class Command(BaseCommand):
             self.import_plans()
             self.import_integrators()
             self.import_portals()
-            advertiser, senha = self.import_advertiser(options["client_id"], options["password"])
-            self.import_properties(advertiser, options["limit"])
+            self.carregar_caches()
+            if options["all"]:
+                self.import_all(options["from_client"], options["to_client"], options["limit"])
+            else:
+                advertiser, senha = self.import_advertiser(options["client_id"], options["password"])
+                self.import_properties(advertiser, options["limit"])
 
+        self.stats["imóveis (total)"] = (
+            f"{self.totais['criados']} criados, {self.totais['atualizados']} atualizados, "
+            f"{self.totais['pulados']} pulados, {self.totais['fotos']} links de foto novos"
+        )
         self.stdout.write(self.style.SUCCESS("\nResumo:"))
         for nome, valor in self.stats.items():
             self.stdout.write(f"  {nome}: {valor}")
-        if senha:
+        if senha and advertiser:
             self.stdout.write(
                 self.style.WARNING(
                     f"\nUsuário do anunciante: {advertiser.email}  senha inicial: {senha}  (gravada no padrão MD5-upper do front)"
                 )
             )
+
+    def import_all(self, from_client, to_client, limit):
+        """
+        Importa todos os clientes do legado, um por vez, sem parar em erro de um deles
+
+        Args:
+            from_client: primeiro Id_Cliente a importar (retomada)
+            to_client: último Id_Cliente (0 = sem limite)
+            limit: máximo de imóveis por cliente (0 = todos)
+        """
+        ids = [r["Id_Cliente"] for r in self.rows("SELECT Id_Cliente FROM cliente WHERE Id_Cliente >= %s ORDER BY Id_Cliente", [from_client])]
+        if to_client:
+            ids = [i for i in ids if i <= to_client]
+        falhas = []
+        inicio = time.monotonic()
+        for n, cid in enumerate(ids, 1):
+            t = time.monotonic()
+            antes = dict(self.totais)
+            try:
+                # O legado derruba conexões ociosas durante as gravações no banco novo; uma nova por cliente evita a espera.
+                self.conectar_legado()
+                advertiser, _ = self.import_advertiser(cid, None, mostrar_senha=False)
+                self.import_properties(advertiser, limit)
+                feitos = (self.totais["criados"] - antes["criados"]) + (self.totais["atualizados"] - antes["atualizados"])
+                decorrido = time.monotonic() - inicio
+                restante = decorrido / n * (len(ids) - n)
+                self.stdout.write(
+                    f"[{n}/{len(ids)}] cliente {cid} {advertiser.name[:40]}: {feitos} imóveis em {time.monotonic() - t:.0f}s "
+                    f"(faltam ~{restante / 60:.0f} min)"
+                )
+            except Exception as e:  # noqa: BLE001 - um cliente com problema não interrompe os demais
+                falhas.append((cid, str(e)[:200]))
+                self.stdout.write(self.style.ERROR(f"[{n}/{len(ids)}] cliente {cid}: FALHOU ({str(e)[:200]})"))
+        self.stats["clientes"] = f"{len(ids) - len(falhas)} importados, {len(falhas)} com falha"
+        for cid, erro in falhas:
+            self.stdout.write(self.style.ERROR(f"  falha no cliente {cid}: {erro}"))
+
+    def carregar_caches(self):
+        """Carrega uma vez o que a importação em lote consulta muito (características e slugs)."""
+        self.features_cache = {(f.scope, f.name.strip().lower()): f for f in Feature.objects.all()}
+        self.slugs_imoveis = set(Property.objects.values_list("slug", flat=True))
+        self.tipos = {t.legacy_id: t for t in PropertyType.objects.exclude(legacy_id=None)}
+        self.cidades = {c.legacy_id: c for c in City.objects.exclude(legacy_id=None)}
+        self.bairros = {b.legacy_id: b for b in Neighborhood.objects.exclude(legacy_id=None)}
+
+    def slug_imovel(self, texto):
+        base = slugify(texto)[:220] or "imovel"
+        slug, n = base, 2
+        while slug in self.slugs_imoveis:
+            sufixo = f"-{n}"
+            slug = f"{base[: 220 - len(sufixo)]}{sufixo}"
+            n += 1
+        self.slugs_imoveis.add(slug)
+        return slug
 
     def conectar_legado(self):
         import MySQLdb
@@ -226,6 +304,9 @@ class Command(BaseCommand):
                     db=cfg["name"],
                     charset="utf8mb4",
                     connect_timeout=20,
+                    # Conexão morta deve falhar rápido em vez de travar a importação.
+                    read_timeout=120,
+                    write_timeout=60,
                 )
                 return
             except MySQLdb.OperationalError as e:
@@ -372,9 +453,15 @@ class Command(BaseCommand):
         self.stats["features"] = f"{criados} criadas"
 
     def feature_por_nome(self, scope, nome, create=True):
+        chave = (scope, nome.strip().lower())
+        cache = getattr(self, "features_cache", None)
+        if cache is not None and chave in cache:
+            return cache[chave]
         feature = Feature.objects.filter(scope=scope, name__iexact=nome.strip()).first()
         if feature is None and create:
             feature = self.criar_feature(scope, nome.strip())
+        if cache is not None and feature is not None:
+            cache[chave] = feature
         return feature
 
     def criar_feature(self, scope, nome, legacy_id=None, sort_order=99):
@@ -482,7 +569,7 @@ class Command(BaseCommand):
         self.stats["portals"] = f"{criados} criados"
 
     # ------------------------------------------------------------- anunciante
-    def import_advertiser(self, client_id, password):
+    def import_advertiser(self, client_id, password, mostrar_senha=True):
         linhas = self.rows("SELECT * FROM cliente WHERE Id_Cliente = %s", [client_id])
         if not linhas:
             raise CommandError(f"cliente {client_id} não encontrado no legado.")
@@ -529,7 +616,11 @@ class Command(BaseCommand):
 
             if advertiser.user_id is None:
                 user = User.objects.filter(email=email).first()
-                if user is None:
+                if user is not None and Advertiser.objects.filter(user=user).exclude(pk=advertiser.pk).exists():
+                    # Mesmo e-mail em dois clientes do legado: o login fica com o primeiro.
+                    self.log(self.style.WARNING(f"  cliente {client_id}: e-mail {email} já pertence a outro anunciante; ficou sem usuário."))
+                    user = None
+                elif user is None:
                     senha_gerada = password or secrets.token_urlsafe(9)
                     user = User(email=email, name=nome, role=User.Role.USER, is_active=True, email_verified=True)
                     user.set_password(md5_upper(senha_gerada))
@@ -562,12 +653,18 @@ class Command(BaseCommand):
             integration.is_active = bool(integration.xml_url)
             integration.save()
 
+            cidades = getattr(self, "cidades", None) or {c.legacy_id: c for c in City.objects.exclude(legacy_id=None)}
+            ja = set(AdvertiserCity.objects.filter(advertiser=advertiser).values_list("city_id", flat=True))
+            novas = []
             for c in self.rows("SELECT Id_Cidade FROM clientecidadeportal WHERE Id_Cliente = %s", [client_id]):
-                city = City.objects.filter(legacy_id=c["Id_Cidade"]).first()
-                if city:
-                    AdvertiserCity.objects.get_or_create(advertiser=advertiser, city=city)
+                city = cidades.get(c["Id_Cidade"])
+                if city and city.pk not in ja:
+                    novas.append(AdvertiserCity(advertiser=advertiser, city=city))
+                    ja.add(city.pk)
+            if novas:
+                AdvertiserCity.objects.bulk_create(novas, ignore_conflicts=True)
 
-        if r["Logo"] and not advertiser.logo:
+        if r["Logo"] and not advertiser.logo and not getattr(self, "skip_logos", False):
             conteudo = download(f"{LEGACY_FILES_BASE}LogoClientes/{r['Logo']}")
             if conteudo:
                 advertiser.logo.save(f"{advertiser.slug}-{r['Logo']}", ContentFile(conteudo), save=True)
@@ -575,31 +672,49 @@ class Command(BaseCommand):
                 self.log(self.style.WARNING("Logo não baixado."))
 
         self.stats["advertiser"] = f"{advertiser.name} ({advertiser.email})"
-        return advertiser, senha_gerada
+        return advertiser, (senha_gerada if mostrar_senha else None)
 
     # ---------------------------------------------------------------- imóveis
+    CAMPOS_IMOVEL = (
+        "reference_code", "status", "is_active", "ad_type", "property_type", "city", "neighborhood",
+        "neighborhood_name", "is_in_condominium", "bedrooms", "suites", "bathrooms", "parking_spaces",
+        "built_area", "total_area", "description", "sale_price", "rent_price", "seasonal_rent_price",
+        "photos_checksum", "imported_at", "published_at", "title", "slug", "advertiser",
+    )
+
     def import_properties(self, advertiser, limit):
+        """
+        Importa os imóveis de um anunciante em lote: o número de consultas não depende de quantos imóveis ele tem
+
+        Args:
+            advertiser: anunciante já importado
+            limit: máximo de imóveis (0 = todos)
+        """
+        if not hasattr(self, "tipos"):
+            self.carregar_caches()
         sql = "SELECT * FROM imovel WHERE Id_Cliente = %s ORDER BY Id_Imovel"
         if limit:
             sql += f" LIMIT {int(limit)}"
         linhas = self.rows(sql, [advertiser.legacy_id])
-        tipos = {t.legacy_id: t for t in PropertyType.objects.exclude(legacy_id=None)}
-        cidades = {c.legacy_id: c for c in City.objects.exclude(legacy_id=None)}
-        bairros = {b.legacy_id: b for b in Neighborhood.objects.exclude(legacy_id=None)}
-        criados = atualizados = fotos_ok = fotos_erro = 0
+        if not linhas:
+            self.stats["properties"] = "nenhum imóvel"
+            return
+        existentes = {p.legacy_id: p for p in Property.objects.filter(legacy_id__in=[r["Id_Imovel"] for r in linhas])}
+        novos, alterados, datas, origem = [], [], [], {}
+        pulados = 0
 
         for r in linhas:
-            tipo = tipos.get(to_int(r["Id_ImovelTipo"])) or tipos.get(20)
-            city = cidades.get(to_int(r["Id_Cidade"]))
+            tipo = self.tipos.get(to_int(r["Id_ImovelTipo"])) or self.tipos.get(20)
+            city = self.cidades.get(to_int(r["Id_Cidade"]))
             if tipo is None or city is None:
-                self.log(self.style.WARNING(f"Imóvel {r['Id_Imovel']} pulado: tipo/cidade sem catálogo."))
+                pulados += 1
                 continue
-            bairro = bairros.get(to_int(r["Id_Bairro"]))
-            prop = Property.objects.filter(legacy_id=r["Id_Imovel"]).first()
+            bairro = self.bairros.get(to_int(r["Id_Bairro"]))
+            prop = existentes.get(r["Id_Imovel"])
             novo = prop is None
             if novo:
-                prop = Property(legacy_id=r["Id_Imovel"], advertiser=advertiser)
-
+                prop = Property(legacy_id=r["Id_Imovel"])
+            prop.advertiser = advertiser
             prop.reference_code = (r["ApelidoImovel"] or str(r["Id_Imovel"])).strip()[:45]
             prop.status = Property.Status.PUBLISHED
             prop.is_active = to_bool(r["Ativo"])
@@ -624,93 +739,133 @@ class Command(BaseCommand):
             atualizado_em = to_datetime(r["DataAtualizacao"])
             prop.imported_at = atualizado_em
             prop.published_at = atualizado_em
-
-            merged = {
-                "title": None,
-                "slug": None,
-                "reference_code": prop.reference_code,
-                "property_type": tipo,
-                "city": city,
-                "neighborhood": bairro,
-                "neighborhood_name": prop.neighborhood_name,
-                "sale_price": prop.sale_price,
-                "rent_price": prop.rent_price,
-                "seasonal_rent_price": prop.seasonal_rent_price,
-            }
-            prop.title = PropertyService.build_title(merged)
+            prop.title = PropertyService.build_title(
+                {
+                    "title": None,
+                    "slug": None,
+                    "reference_code": prop.reference_code,
+                    "property_type": tipo,
+                    "city": city,
+                    "neighborhood": bairro,
+                    "neighborhood_name": prop.neighborhood_name,
+                    "sale_price": prop.sale_price,
+                    "rent_price": prop.rent_price,
+                    "seasonal_rent_price": prop.seasonal_rent_price,
+                }
+            )
             if novo or not prop.slug:
-                prop.slug = unique_slug(Property, f"{prop.title} {prop.reference_code}", max_length=220, exclude_pk=prop.pk)
-
-            with transaction.atomic():
-                prop.save()
-                features = [self.feature_por_nome(Feature.Scope.PROPERTY, n) for n in split_list(r["InfraEstruturaImovel"])]
-                features += [self.feature_por_nome(Feature.Scope.CONDOMINIUM, n) for n in split_list(r["InfraEstruturaCondominio"])]
-                prop.features.set([f for f in features if f])
-                self.sync_fees(prop, r["Taxa"])
+                prop.slug = self.slug_imovel(f"{prop.title} {prop.reference_code}")
+            (novos if novo else alterados).append(prop)
+            origem[prop.pk] = r
             if atualizado_em:
-                Property.objects.filter(pk=prop.pk).update(updated_at=atualizado_em)
+                prop.updated_at = atualizado_em
+                datas.append(prop)
 
-            if not self.skip_photos:
-                ok, erro = self.sync_photos(prop, r["Imagem"])
-                fotos_ok += ok
-                fotos_erro += erro
+        todos = novos + alterados
+        pks = [p.pk for p in todos]
+        with transaction.atomic():
+            if novos:
+                Property.objects.bulk_create(novos, batch_size=300)
+            if alterados:
+                Property.objects.bulk_update(alterados, self.CAMPOS_IMOVEL, batch_size=200)
+            if datas:
+                # bulk_create aplica auto_now; a data real do legado volta aqui (bulk_update não passa pelo auto_now).
+                Property.objects.bulk_update(datas, ["updated_at"], batch_size=500)
 
-            criados += novo
-            atualizados += not novo
-            self.log(f"  imóvel {prop.reference_code}: {'criado' if novo else 'atualizado'}")
+            through = Property.features.through
+            through.objects.filter(property_id__in=pks).delete()
+            vinculos = []
+            for prop in todos:
+                r = origem[prop.pk]
+                nomes = [(Feature.Scope.PROPERTY, n) for n in split_list(r["InfraEstruturaImovel"])]
+                nomes += [(Feature.Scope.CONDOMINIUM, n) for n in split_list(r["InfraEstruturaCondominio"])]
+                vistos = set()
+                for scope, nome in nomes:
+                    f = self.feature_por_nome(scope, nome)
+                    if f and f.pk not in vistos:
+                        vistos.add(f.pk)
+                        vinculos.append(through(property_id=prop.pk, feature_id=f.pk))
+            through.objects.bulk_create(vinculos, batch_size=1000, ignore_conflicts=True)
 
-        self.stats["properties"] = f"{criados} criados, {atualizados} atualizados"
-        if not self.skip_photos:
-            self.stats["photos"] = f"{fotos_ok} links registrados, {fotos_erro} capas sem miniatura"
+            PropertyFee.objects.filter(property_id__in=pks).delete()
+            taxas = [fee for prop in todos for fee in self.montar_taxas(prop, origem[prop.pk]["Taxa"])]
+            PropertyFee.objects.bulk_create(taxas, batch_size=1000)
 
-    def sync_fees(self, prop, taxa_json):
+            fotos_novas = 0 if self.skip_photos else self.sync_photos_lote(todos, origem)
+
+        self.totais["criados"] += len(novos)
+        self.totais["atualizados"] += len(alterados)
+        self.totais["pulados"] += pulados
+        self.totais["fotos"] += fotos_novas
+        self.stats["properties"] = f"{len(novos)} criados, {len(alterados)} atualizados, {pulados} pulados"
+
+    @staticmethod
+    def montar_taxas(prop, taxa_json):
         try:
-            taxas = json.loads(taxa_json) if taxa_json else []
+            itens = json.loads(taxa_json) if taxa_json else []
         except json.JSONDecodeError:
-            taxas = []
-        prop.fees.all().delete()
-        for t in taxas:
+            itens = []
+        taxas = []
+        for t in itens:
             valor = to_decimal(t.get("TaxaValor"))
             descricao = (t.get("TaxaDescricao") or "").strip()
             if valor is None or not descricao:
                 continue
-            PropertyFee.objects.create(
-                property=prop,
-                description=descricao[:150],
-                amount=valor,
-                period=PropertyFee.Period.YEARLY if "iptu" in descricao.lower() else PropertyFee.Period.MONTHLY,
-                notes=(t.get("TaxaOBS") or "")[:300],
+            taxas.append(
+                PropertyFee(
+                    property_id=prop.pk,
+                    description=descricao[:150],
+                    amount=valor,
+                    period=PropertyFee.Period.YEARLY if "iptu" in descricao.lower() else PropertyFee.Period.MONTHLY,
+                    notes=(t.get("TaxaOBS") or "")[:300],
+                )
             )
+        return taxas
 
-    def sync_photos(self, prop, imagem_json):
-        """Fotos de XML não são hospedadas: grava só a URL externa e gera miniatura apenas da capa."""
-        try:
-            itens = json.loads(imagem_json) if imagem_json else []
-        except json.JSONDecodeError:
-            itens = []
-        existentes = {p.source_url: p for p in prop.photos.all()}
-        criadas = 0
-        for item in itens:
-            url = (item.get("Url") or "").strip()
-            if not url:
-                continue
-            ordem = to_int(item.get("NoImagem"), len(existentes) + 1)
-            capa = to_bool(item.get("Mini"))
-            foto = existentes.get(url)
-            if foto is None:
-                foto = PropertyPhoto.objects.create(property=prop, source_url=url[:500], sort_order=ordem, is_cover=capa)
-                existentes[url] = foto
-                criadas += 1
-            elif foto.sort_order != ordem or foto.is_cover != capa:
-                foto.sort_order, foto.is_cover = ordem, capa
-                foto.save(update_fields=["sort_order", "is_cover", "updated_at"])
+    def sync_photos_lote(self, props, origem):
+        """
+        Registra os links das fotos (não hospeda nem gera miniatura) e marca uma capa por imóvel
 
-        fotos = list(prop.photos.order_by("sort_order", "created_at"))
-        if not fotos:
-            return 0, 0
-        capa = next((f for f in fotos if f.is_cover), fotos[0])
-        if not capa.is_cover:
-            capa.is_cover = True
-            capa.save(update_fields=["is_cover", "updated_at"])
-        ok = ensure_cover_thumbnail(capa)
-        return criadas, 0 if ok else 1
+        Args:
+            props: imóveis já salvos
+            origem: linha do legado por pk do imóvel
+
+        Returns:
+            quantidade de fotos novas
+        """
+        por_imovel = {}
+        for foto in PropertyPhoto.objects.filter(property_id__in=[p.pk for p in props]):
+            por_imovel.setdefault(foto.property_id, {})[foto.source_url] = foto
+        novas, alteradas = [], []
+        for prop in props:
+            try:
+                itens = json.loads(origem[prop.pk]["Imagem"]) if origem[prop.pk]["Imagem"] else []
+            except json.JSONDecodeError:
+                itens = []
+            atuais = por_imovel.get(prop.pk, {})
+            lista = []
+            for item in itens:
+                url = (item.get("Url") or "").strip()[:500]
+                if not url:
+                    continue
+                ordem = to_int(item.get("NoImagem"), len(lista) + 1)
+                capa = to_bool(item.get("Mini"))
+                foto = atuais.get(url)
+                if foto is None:
+                    foto = PropertyPhoto(property_id=prop.pk, source_url=url, sort_order=ordem, is_cover=capa)
+                    atuais[url] = foto
+                    novas.append(foto)
+                elif foto.sort_order != ordem or foto.is_cover != capa:
+                    foto.sort_order, foto.is_cover = ordem, capa
+                    alteradas.append(foto)
+                lista.append(foto)
+            if lista and not any(f.is_cover for f in lista):
+                primeira = min(lista, key=lambda f: f.sort_order)
+                primeira.is_cover = True
+                if primeira not in novas and primeira not in alteradas:
+                    alteradas.append(primeira)
+        PropertyPhoto.objects.bulk_create(novas, batch_size=1000)
+        if alteradas:
+            PropertyPhoto.objects.bulk_update(alteradas, ["sort_order", "is_cover"], batch_size=500)
+        return len(novas)
+
