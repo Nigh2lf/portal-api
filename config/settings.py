@@ -365,21 +365,49 @@ EMAIL_API_TIMEOUT = int(os.getenv("EMAIL_API_TIMEOUT", "10"))
 
 # ---------------------------------------------------------------------------
 # Cache das respostas públicas (core/services/public_cache.py).
-# Dados em memória do processo; versões em arquivo local, compartilhado pelos workers
-# do mesmo container. Para Redis, troque os dois BACKEND/LOCATION por django_redis.
-CACHES = {
-    "default": {
-        "BACKEND": os.getenv("CACHE_BACKEND", "django.core.cache.backends.locmem.LocMemCache"),
-        "LOCATION": os.getenv("CACHE_LOCATION", "portal-api"),
-        "TIMEOUT": int(os.getenv("CACHE_DEFAULT_TIMEOUT", "600")),
-        "OPTIONS": {"MAX_ENTRIES": int(os.getenv("CACHE_MAX_ENTRIES", "5000"))},
-    },
-    "cache_versions": {
-        "BACKEND": os.getenv("CACHE_VERSIONS_BACKEND", "django.core.cache.backends.filebased.FileBasedCache"),
-        "LOCATION": os.getenv("CACHE_VERSIONS_LOCATION", str(Path(tempfile.gettempdir()) / "portal-api-cache-versions")),
-        "TIMEOUT": None,
-    },
-}
+# Com REDIS_URL (Railway: ${{Redis.REDIS_URL}}; local: túnel ou Redis local) os dois
+# aliases vão para o Redis, compartilhado entre containers/workers. O Redis é dividido
+# com o trustimovel-api, por isso o KEY_PREFIX "portal". Sem REDIS_URL: dados em memória
+# do processo e versões em arquivo local, compartilhado pelos workers do mesmo container.
+REDIS_URL = os.getenv("REDIS_URL")
+
+if REDIS_URL:
+    _REDIS_OPTIONS = {
+        "socket_connect_timeout": 5,
+        "socket_timeout": 5,
+        "health_check_interval": 30,
+        "retry_on_timeout": True,
+    }
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": f"{REDIS_URL}/0",
+            "KEY_PREFIX": "portal",
+            "TIMEOUT": 300,
+            "OPTIONS": _REDIS_OPTIONS,
+        },
+        "cache_versions": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": f"{REDIS_URL}/0",
+            "KEY_PREFIX": "portal:versions",
+            "TIMEOUT": None,
+            "OPTIONS": _REDIS_OPTIONS,
+        },
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": os.getenv("CACHE_BACKEND", "django.core.cache.backends.locmem.LocMemCache"),
+            "LOCATION": os.getenv("CACHE_LOCATION", "portal-api"),
+            "TIMEOUT": int(os.getenv("CACHE_DEFAULT_TIMEOUT", "600")),
+            "OPTIONS": {"MAX_ENTRIES": int(os.getenv("CACHE_MAX_ENTRIES", "5000"))},
+        },
+        "cache_versions": {
+            "BACKEND": os.getenv("CACHE_VERSIONS_BACKEND", "django.core.cache.backends.filebased.FileBasedCache"),
+            "LOCATION": os.getenv("CACHE_VERSIONS_LOCATION", str(Path(tempfile.gettempdir()) / "portal-api-cache-versions")),
+            "TIMEOUT": None,
+        },
+    }
 PUBLIC_CACHE_ENABLED = env_bool("PUBLIC_CACHE_ENABLED", default=True)
 # Importação XML (app importacao): janela noturna no horário de Brasília; começa no início
 # e não inicia anunciante novo depois do fim (o restante fica para a noite seguinte).
