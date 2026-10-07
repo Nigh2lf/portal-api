@@ -6,7 +6,7 @@ from rest_framework.exceptions import ValidationError
 
 from core.models import City, Neighborhood, Portal, Property, PropertyType, SearchLog
 from core.services.deferred_writes import defer
-from public.services.scope import city_ids, visible_properties, with_card_data
+from public.services.scope import city_ids, has_photo_exists, visible_properties, with_card_data
 
 PURPOSE_PRICE_FIELD = {"SALE": "sale_price", "RENT": "rent_price", "SEASONAL": "seasonal_rent_price"}
 ORDERINGS = {"recent": "-updated_at", "price_asc": "price_value", "price_desc": "-price_value"}
@@ -168,18 +168,22 @@ class SearchService:
         if filters.price_max is not None:
             qs = qs.filter(**{f"{price_field}__lte": filters.price_max})
 
-        qs = with_card_data(qs).annotate(
-            price_value=F(price_field),
-            has_photo=Case(When(photos_count__gt=0, then=Value(1)), default=Value(0), output_field=IntegerField()),
-        )
-        order = ORDERINGS[filters.ordering]
-        qs = qs.annotate(ad_rank=Property.ad_rank_expression()).order_by("-ad_rank", "-has_photo", order, "-updated_at")
-
         total = qs.count()
         total_pages = max(1, -(-total // filters.page_size))
         page = min(max(1, filters.page), total_pages)
         inicio = (page - 1) * filters.page_size
-        results = list(qs[inicio : inicio + filters.page_size])
+
+        # Duas etapas: (1) só os ids da página, ordenados — a tabela temporária que o
+        # MySQL monta para ordenar por colunas calculadas fica estreita; (2) as linhas
+        # completas (joins + fotos) só dos 30 imóveis. `has_photo` por EXISTS, nunca
+        # por JOIN com fotos (ver `photos_count_subquery`).
+        order = ORDERINGS[filters.ordering]
+        ordenado = qs.annotate(price_value=F(price_field), has_photo=has_photo_exists(), ad_rank=Property.ad_rank_expression()).order_by(
+            "-ad_rank", "-has_photo", order, "-updated_at"
+        )
+        ids = list(ordenado.values_list("pk", flat=True)[inicio : inicio + filters.page_size])
+        por_id = {p.pk: p for p in with_card_data(Property.objects.filter(pk__in=ids)).annotate(price_value=F(price_field))}
+        results = [por_id[i] for i in ids if i in por_id]
         return {
             "results": results,
             "count": total,

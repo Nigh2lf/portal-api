@@ -15,6 +15,7 @@ from core.models import (
     PropertyType,
     SearchLog,
 )
+from public.services.scope import photos_count_subquery
 
 PURPOSE_CASE = Case(
     When(sale_price__isnull=False, then=Value("SALE")),
@@ -49,7 +50,7 @@ class HomeService:
                 Prefetch("photos", queryset=PropertyPhoto.objects.order_by("sort_order", "created_at")),
                 "features",
             )
-            .annotate(photos_count=Count("photos", distinct=True))
+            .annotate(photos_count=photos_count_subquery())
         )
 
     def featured(self, limit=12):
