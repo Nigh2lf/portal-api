@@ -121,6 +121,8 @@ from core.modules.user.serializer import (
     VerifyEmailSerializer,
 )
 from core.modules.xml_import_run.serializer import (
+    XmlImportBatchDetailSerializer,
+    XmlImportBatchSerializer,
     XmlImportErrorSerializer,
     XmlImportRunDetailSerializer,
     XmlImportRunListSerializer,
@@ -212,6 +214,8 @@ __all__ = [
     "UserListSerializer",
     "UserSerializer",
     "VerifyEmailSerializer",
+    "XmlImportBatchDetailSerializer",
+    "XmlImportBatchSerializer",
     "XmlImportErrorSerializer",
     "XmlImportRunDetailSerializer",
     "XmlImportRunListSerializer",

@@ -117,6 +117,7 @@ python manage.py import_legacy --client-id 5
 python manage.py import_legacy --client-id 5 --skip-photos   # sem baixar fotos
 python manage.py import_legacy --client-id 5 --limit 10      # teste com 10 imóveis
 python manage.py import_legacy --client-id 5 --password 'Senha@123'
+python manage.py import_legacy --all --skip-properties      # todos os clientes, só o cadastro (sem imóveis)
 ```
 
 O que faz para o anunciante:

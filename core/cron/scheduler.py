@@ -20,7 +20,12 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from django.conf import settings
 
-from core.cron.jobs import heartbeat, importar_xml_noturno, purge_old_audit_logs, purge_old_request_logs
+from core.cron.jobs import (
+    heartbeat,
+    nightly_xml_import,
+    purge_old_audit_logs,
+    purge_old_request_logs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +90,15 @@ def start() -> BackgroundScheduler:
         id="purge_old_audit_logs",
         replace_existing=True,
     )
-    imp_hour, imp_minute = _parse_hm(getattr(settings, "IMPORTACAO_JANELA_INICIO", "01:00"), 1, 0)
+    imp_hour, imp_minute = _parse_hm(getattr(settings, "XML_IMPORT_WINDOW_START", "01:00"), 1, 0)
     scheduler.add_job(
-        importar_xml_noturno,
+        nightly_xml_import,
         trigger="cron",
         hour=imp_hour,
         minute=imp_minute,
         # A janela é no horário de Brasília; o scheduler roda em UTC.
         timezone="America/Sao_Paulo",
-        id="importar_xml_noturno",
+        id="nightly_xml_import",
         replace_existing=True,
         misfire_grace_time=3600,
     )

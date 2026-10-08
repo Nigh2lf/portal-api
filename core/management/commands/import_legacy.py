@@ -9,6 +9,7 @@ Uso::
     python manage.py import_legacy --all                    # todos os clientes do legado
     python manage.py import_legacy --all --from-client 300  # retoma a partir de um Id_Cliente
     python manage.py import_legacy --all --skip-logos --skip-photos
+    python manage.py import_legacy --all --skip-properties   # só o cadastro dos clientes, sem imóveis
 
 Os imóveis entram em lote (poucas consultas por cliente, não por imóvel): com o banco
 remoto, cada consulta custa ~200 ms. As fotos são só links externos; a miniatura da
@@ -185,6 +186,7 @@ class Command(BaseCommand):
         parser.add_argument("--skip-photos", action="store_true", help="Não registra os links das fotos.")
         parser.add_argument("--skip-logos", action="store_true", help="Não baixa os logos dos anunciantes.")
         parser.add_argument("--limit", type=int, default=0, help="Importa só os N primeiros imóveis de cada cliente (teste).")
+        parser.add_argument("--skip-properties", action="store_true", help="Só o cadastro do cliente (usuário, integração, cidades, logo); não importa imóveis.")
 
     # ------------------------------------------------------------------ infra
     def handle(self, *args, **options):
@@ -197,6 +199,7 @@ class Command(BaseCommand):
             raise CommandError("Informe --client-id ou --all.")
         self.skip_photos = options["skip_photos"]
         self.skip_logos = options["skip_logos"]
+        self.skip_properties = options["skip_properties"]
         self.stats = {}
         self.totais = {"criados": 0, "atualizados": 0, "pulados": 0, "fotos": 0}
         senha = None
@@ -216,7 +219,8 @@ class Command(BaseCommand):
                 self.import_all(options["from_client"], options["to_client"], options["limit"])
             else:
                 advertiser, senha = self.import_advertiser(options["client_id"], options["password"])
-                self.import_properties(advertiser, options["limit"])
+                if not self.skip_properties:
+                    self.import_properties(advertiser, options["limit"])
 
         self.stats["imóveis (total)"] = (
             f"{self.totais['criados']} criados, {self.totais['atualizados']} atualizados, "
@@ -253,12 +257,13 @@ class Command(BaseCommand):
                 # O legado derruba conexões ociosas durante as gravações no banco novo; uma nova por cliente evita a espera.
                 self.conectar_legado()
                 advertiser, _ = self.import_advertiser(cid, None, mostrar_senha=False)
-                self.import_properties(advertiser, limit)
+                if not self.skip_properties:
+                    self.import_properties(advertiser, limit)
                 feitos = (self.totais["criados"] - antes["criados"]) + (self.totais["atualizados"] - antes["atualizados"])
                 decorrido = time.monotonic() - inicio
                 restante = decorrido / n * (len(ids) - n)
                 self.stdout.write(
-                    f"[{n}/{len(ids)}] cliente {cid} {advertiser.name[:40]}: {feitos} imóveis em {time.monotonic() - t:.0f}s "
+                    f"[{n}/{len(ids)}] cliente {cid} {advertiser.name[:40]}: {'só cadastro' if self.skip_properties else f'{feitos} imóveis'} em {time.monotonic() - t:.0f}s "
                     f"(faltam ~{restante / 60:.0f} min)"
                 )
             except Exception as e:  # noqa: BLE001 - um cliente com problema não interrompe os demais

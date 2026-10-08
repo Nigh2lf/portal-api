@@ -2,7 +2,7 @@
 
 Roda depois do ``import_legacy``: a importação só registra os links das fotos. Baixa a
 capa de cada imóvel, gera a miniatura 480x320 e envia ao storage (S3). A importação
-XML (app ``importacao``) usa a mesma rotina para as capas novas de cada anunciante.
+XML (app ``xml_import``) usa a mesma rotina para as capas novas de cada anunciante.
 
 Uso::
 

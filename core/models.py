@@ -1243,10 +1243,82 @@ class SearchLog(AbstractModel):
 # =============================================================================
 
 
+class XmlImportBatch(AbstractModel):
+    """Lote da importação XML: todos os anunciantes ou os escolhidos, disparado pelo admin, pelo cron ou pelo comando.
+
+    O lote roda em segundo plano e vai atualizando os contadores; ``heartbeat_at`` mostra que o
+    processo ainda está vivo. Cancelar é cooperativo: o admin marca ``CANCELLING`` e o processo
+    para no próximo ponto de checagem, sem deixar anunciante meio aplicado. ``created_by`` é quem pediu.
+    """
+
+    class Status(models.TextChoices):
+        QUEUED = "QUEUED", "Na fila"
+        RUNNING = "RUNNING", "Executando"
+        CANCELLING = "CANCELLING", "Cancelando"
+        CANCELLED = "CANCELLED", "Cancelado"
+        SUCCESS = "SUCCESS", "Concluído"
+        PARTIAL = "PARTIAL", "Concluído com falhas"
+        FAILED = "FAILED", "Falhou"
+
+    class Origin(models.TextChoices):
+        MANUAL = "MANUAL", "Painel"
+        CRON = "CRON", "Cron"
+        COMMAND = "COMMAND", "Comando"
+
+    class Scope(models.TextChoices):
+        ALL = "ALL", "Todos os anunciantes"
+        SELECTED = "SELECTED", "Anunciantes escolhidos"
+
+    ACTIVE_STATUSES = ("QUEUED", "RUNNING", "CANCELLING")
+
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.QUEUED)
+    origin = models.CharField(max_length=10, choices=Origin.choices, default=Origin.MANUAL)
+    scope = models.CharField(max_length=10, choices=Scope.choices, default=Scope.ALL)
+    # Fila de anunciantes (UUIDs em texto), na ordem em que serão processados.
+    advertiser_ids = models.JSONField(default=list, blank=True)
+    # Cron: não começa anunciante novo depois deste horário (fim da janela noturna).
+    deadline_at = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    current_advertiser = models.ForeignKey(
+        "core.Advertiser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    total_advertisers = models.PositiveIntegerField(default=0)
+    done = models.PositiveIntegerField(default=0)
+    ok = models.PositiveIntegerField(default=0)
+    failed = models.PositiveIntegerField(default=0)
+    skipped = models.PositiveIntegerField(default=0)
+    cancelled = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True, default="")
+
+    class Meta(AbstractModel.Meta):
+        app_label = "core"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"lote {self.status} {self.created_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def is_active(self):
+        return self.status in self.ACTIVE_STATUSES
+
+
 class XmlImportRun(LegacyIdMixin, AbstractModel):
     """Legado: ``ControleImportacao``. Uma execução da importação XML de um anunciante."""
 
+    class Status(models.TextChoices):
+        RUNNING = "RUNNING", "Executando"
+        SUCCESS = "SUCCESS", "Concluída"
+        FAILED = "FAILED", "Falhou"
+        CANCELLED = "CANCELLED", "Cancelada"
+        SKIPPED = "SKIPPED", "Não executada"
+
     advertiser = models.ForeignKey("core.Advertiser", on_delete=models.CASCADE, related_name="import_runs")
+    batch = models.ForeignKey(XmlImportBatch, on_delete=models.SET_NULL, null=True, blank=True, related_name="runs")
+    # Execuções antigas (antes do campo) ficam como SUCCESS: todas terminaram.
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SUCCESS)
+    error_message = models.TextField(blank=True, default="")
     started_at = models.DateTimeField()
     finished_at = models.DateTimeField(null=True, blank=True)
     total_properties = models.PositiveIntegerField(default=0)

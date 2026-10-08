@@ -8,24 +8,24 @@ from django.db import connection
 
 
 @contextmanager
-def trava(nome: str, espera: int = 0):
+def lock(name: str, wait: int = 0):
     """
     Garante que só um processo execute o bloco; os demais recebem ``False`` e não esperam
 
     Args:
-        nome: nome da trava (global no servidor MySQL)
-        espera: segundos aguardando a trava
+        name: nome da trava (global no servidor MySQL)
+        wait: segundos aguardando a trava
 
     Returns:
         ``True`` se a trava foi obtida
     """
     # GET_LOCK pertence à conexão: o bloco não pode fechar a conexão do Django no meio.
     with connection.cursor() as cur:
-        cur.execute("SELECT GET_LOCK(%s, %s)", [nome, espera])
-        obtida = cur.fetchone()[0] == 1
+        cur.execute("SELECT GET_LOCK(%s, %s)", [name, wait])
+        acquired = cur.fetchone()[0] == 1
     try:
-        yield obtida
+        yield acquired
     finally:
-        if obtida:
+        if acquired:
             with connection.cursor() as cur:
-                cur.execute("SELECT RELEASE_LOCK(%s)", [nome])
+                cur.execute("SELECT RELEASE_LOCK(%s)", [name])

@@ -61,11 +61,11 @@ def purge_old_audit_logs() -> None:
         logger.exception("purge_old_audit_logs falhou")
 
 
-def importar_xml_noturno() -> None:
-    """Janela noturna da importação XML (app ``importacao``); só um worker roda, os outros saem na hora."""
-    from importacao.services.execucao import rodar_janela
+def nightly_xml_import() -> None:
+    """Janela noturna da importação XML (app ``xml_import``); só um worker roda, os outros saem na hora."""
+    from xml_import.services.execution import run_window
 
     try:
-        logger.info("[cron] importacao_xml: %s", rodar_janela())
+        logger.info("[cron] xml_import: %s", run_window())
     except Exception:  # noqa: BLE001 - erro no job não pode derrubar o scheduler
-        logger.exception("[cron] importacao_xml falhou")
+        logger.exception("[cron] xml_import falhou")

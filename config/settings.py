@@ -98,7 +98,7 @@ INSTALLED_APPS = [
     "core",
     "public",
     "advertiser",
-    "importacao",
+    "xml_import",
 ]
 
 # MFA no Django Admin (django-otp). Quando True, /admin/ usa OTPAdminSite e
@@ -417,12 +417,12 @@ else:
         },
     }
 PUBLIC_CACHE_ENABLED = env_bool("PUBLIC_CACHE_ENABLED", default=True)
-# Importação XML (app importacao): janela noturna no horário de Brasília; começa no início
+# Importação XML (app xml_import): janela noturna no horário de Brasília; começa no início
 # e não inicia anunciante novo depois do fim (o restante fica para a noite seguinte).
-IMPORTACAO_JANELA_INICIO = os.getenv("IMPORTACAO_JANELA_INICIO", "01:00")
-IMPORTACAO_JANELA_FIM = os.getenv("IMPORTACAO_JANELA_FIM", "03:00")
-IMPORTACAO_TIMEOUT_DOWNLOAD = int(os.getenv("IMPORTACAO_TIMEOUT_DOWNLOAD", "120"))
-IMPORTACAO_MAX_MB = int(os.getenv("IMPORTACAO_MAX_MB", "80"))
+XML_IMPORT_WINDOW_START = os.getenv("XML_IMPORT_WINDOW_START", "01:00")
+XML_IMPORT_WINDOW_END = os.getenv("XML_IMPORT_WINDOW_END", "03:00")
+XML_IMPORT_DOWNLOAD_TIMEOUT = int(os.getenv("XML_IMPORT_DOWNLOAD_TIMEOUT", "120"))
+XML_IMPORT_MAX_MB = int(os.getenv("XML_IMPORT_MAX_MB", "80"))
 # Estatísticas do site (SearchLog, PropertyView) gravadas numa thread de fundo (core/services/deferred_writes.py).
 DEFERRED_WRITES_ENABLED = env_bool("DEFERRED_WRITES_ENABLED", default=True)
 SITE_REVALIDATE_URL = os.getenv("SITE_REVALIDATE_URL", "")

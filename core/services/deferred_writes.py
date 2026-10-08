@@ -19,8 +19,12 @@ logger = logging.getLogger(__name__)
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="deferred-writes")
 
 
-def _run(fn, args, kwargs):
-    close_old_connections()
+def _run(fn, args, kwargs, in_worker=True):
+    # Só a thread de fundo recicla a própria conexão. Inline (DEFERRED_WRITES_ENABLED=False,
+    # usado nos testes) roda na thread da requisição e fechar a conexão ali quebraria a
+    # transação em andamento.
+    if in_worker:
+        close_old_connections()
     try:
         fn(*args, **kwargs)
     except Exception:  # noqa: BLE001 - estatística nunca derruba nada
@@ -37,6 +41,6 @@ def defer(fn, *args, **kwargs):
         kwargs: argumentos nomeados
     """
     if not getattr(settings, "DEFERRED_WRITES_ENABLED", True):
-        _run(fn, args, kwargs)
+        _run(fn, args, kwargs, in_worker=False)
         return
     _executor.submit(_run, fn, args, kwargs)

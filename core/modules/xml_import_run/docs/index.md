@@ -34,7 +34,7 @@ Query params: `search` (`advertiser__name`), `advertiser` (UUID),
 
 Remoção física; os erros vinculados ficam com `run = null`. Resposta `204`.
 
-## Importar agora / simular (app `importacao`)
+## Importar agora / simular (app `xml_import`)
 
 | Método | URL | Permissão |
 |---|---|---|
