@@ -140,6 +140,21 @@ python manage.py collectstatic --noinput
 python manage.py seedpermissions   # opcional, idempotente
 ```
 
+## Railway
+
+Configuração em `railway.json` (tem precedência sobre a interface):
+
+- **`preDeployCommand`**: `migrate` e `collectstatic` rodam antes do container
+  novo receber tráfego. O `collectstatic` envia os estáticos para o S3 e leva
+  mais de um minuto; no `startCommand` ele atrasava o gunicorn e gerava 502
+  a cada deploy.
+- **`startCommand`**: só o gunicorn.
+- **`healthcheckPath`**: `/api/v1/health/`. O Railway só troca o tráfego quando
+  o container novo responder 200; o antigo continua no ar até lá. O request
+  chega com `Host: healthcheck.railway.app`, incluído no `ALLOWED_HOSTS`
+  automaticamente quando `RAILWAY_ENVIRONMENT` existe, e isento do redirect
+  para HTTPS (`SECURE_REDIRECT_EXEMPT`).
+
 ## Servidor
 
 Use **gunicorn** + **nginx** (ou ALB direto).

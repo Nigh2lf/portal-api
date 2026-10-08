@@ -54,6 +54,11 @@ DEBUG = env_bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"] if DEBUG else [])
 
+# Railway: o healthcheck do deploy (railway.json -> healthcheckPath) chega com
+# Host "healthcheck.railway.app"; sem ele na lista o Django responde 400 e o deploy falha.
+if os.getenv("RAILWAY_ENVIRONMENT") and "healthcheck.railway.app" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append("healthcheck.railway.app")
+
 AUTH_USER_MODEL = "core.User"
 
 # Nome do projeto. Única fonte de verdade exibida em:
@@ -254,6 +259,9 @@ if not DEBUG:
     SECURE_HSTS_PRELOAD = True
     SECURE_REFERRER_POLICY = "same-origin"
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    # O healthcheck do Railway bate direto no container, em HTTP e sem X-Forwarded-Proto;
+    # redirecionar para HTTPS faria o deploy falhar.
+    SECURE_REDIRECT_EXEMPT = [r"^api/v1/health/$"]
 
 
 # Password validation
