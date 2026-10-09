@@ -39,7 +39,9 @@ def save(advertiser_id, data: dict, suffix: str = "json") -> Path:
     """
     target = path(advertiser_id, suffix)
     temp = target.with_suffix(target.suffix + ".tmp")
-    temp.write_text(json.dumps(data, ensure_ascii=False, default=str), encoding="utf-8")
+    # json.dump direto no arquivo: json.dumps montaria o texto inteiro na memória.
+    with open(temp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, default=str)
     os.replace(temp, target)
     return target
 

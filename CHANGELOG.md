@@ -14,6 +14,15 @@ de qual versão deste boilerplate vocês saíram.
 
 ## [Unreleased]
 
+### Mudou
+- Importação XML (`xml_import`) sem segurar memória no worker do gunicorn: painel e
+  cron rodam `manage.py import_xml` num processo separado (`XML_IMPORT_SUBPROCESS`;
+  novas opções `--batch` e `--origin`); o feed é baixado em blocos e lido em streaming
+  (`iterparse`, um imóvel por vez) em vez de montar a árvore inteira; miniaturas de capa
+  decodificam o JPEG já reduzido (`draft`) com 3 threads em vez de 6; log de memória por
+  anunciante no lote. Start command do Railway com `MALLOC_ARENA_MAX=2` e
+  `--max-requests 500`.
+
 ### Adicionado
 - MFA opcional no Django Admin via `django-otp` (`ADMIN_MFA_ENABLED`). Apps
   `django_otp`, `otp_totp` e `otp_static` ficam sempre instalados; o

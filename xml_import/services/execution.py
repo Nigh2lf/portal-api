@@ -228,14 +228,21 @@ def in_progress(advertiser) -> bool:
 
 def start_in_background(advertiser_id, simulate=False):
     """
-    Dispara ``import_advertiser`` numa thread (simulação pelo admin): a requisição não espera o download
+    Dispara ``import_advertiser`` sem esperar (simulação pelo admin): a requisição não espera o download
 
+    Num processo separado (padrão, ``XML_IMPORT_SUBPROCESS``) ou numa thread do worker.
     Importação de verdade pelo painel passa por lote (``batches.create_batch`` + ``start_batch_in_background``).
 
     Args:
         advertiser_id: pk do anunciante
         simulate: só calcula a diferença
     """
+    if getattr(settings, "XML_IMPORT_SUBPROCESS", True):
+        from xml_import.services.spawn import spawn_import_command
+
+        args = ("--advertiser", advertiser_id) + (("--simulate",) if simulate else ())
+        spawn_import_command(*args)
+        return
 
     def run():
         try:

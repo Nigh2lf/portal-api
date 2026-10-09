@@ -62,10 +62,22 @@ def purge_old_audit_logs() -> None:
 
 
 def nightly_xml_import() -> None:
-    """Janela noturna da importação XML (app ``xml_import``); só um worker roda, os outros saem na hora."""
-    from xml_import.services.execution import run_window
+    """Janela noturna da importação XML (app ``xml_import``); só um worker roda, os outros saem na hora.
+
+    Por padrão roda ``manage.py import_xml --window --origin cron`` num processo separado
+    (``XML_IMPORT_SUBPROCESS``), que devolve a memória ao terminar; a thread do job só espera.
+    """
+    from django.conf import settings
 
     try:
+        if getattr(settings, "XML_IMPORT_SUBPROCESS", True):
+            from xml_import.services.spawn import spawn_import_command
+
+            code = spawn_import_command("--window", "--origin", "cron").wait()
+            logger.info("[cron] xml_import: processo terminou com código %s", code)
+            return
+        from xml_import.services.execution import run_window
+
         logger.info("[cron] xml_import: %s", run_window())
     except Exception:  # noqa: BLE001 - erro no job não pode derrubar o scheduler
         logger.exception("[cron] xml_import falhou")

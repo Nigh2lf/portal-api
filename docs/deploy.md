@@ -132,6 +132,12 @@ RUN_CRON=True
 workers, `RUN_CRON=True` em todos faz cada job rodar N vezes. Detalhes em
 [cron.md](cron.md#deploy).
 
+A importação XML noturna é a exceção tolerada: com `RUN_CRON=True` em todos os
+workers, o `GET_LOCK` do MySQL garante que só um dispara, e o trabalho pesado roda
+num processo separado (`manage.py import_xml`), não no worker. Alternativa mais
+limpa no Railway: um serviço *Cron Schedule* do mesmo repo com start command
+`python manage.py import_xml --window --origin cron` e `RUN_CRON=False` no serviço web.
+
 ## Comandos no deploy
 
 ```bash

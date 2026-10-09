@@ -106,6 +106,7 @@ Mude se tiver bom motivo (mas UTC evita bugs de horário de verão).
 | `heartbeat` | a cada 60min | Loga `cron heartbeat ok`. Útil pra confirmar que o scheduler tá vivo. |
 | `purge_old_request_logs` | diário, `LOG_REQUESTS_PURGE_SCHEDULE` (default 03:00 UTC) | Remove `LogRequest` com mais de `LOG_REQUESTS_RETENTION_DAYS` (default 30) dias. |
 | `purge_old_audit_logs` | diário, `MODEL_AUDIT_PURGE_SCHEDULE` (default 03:15 UTC) | Remove `LogModelChange` com mais de `MODEL_AUDIT_RETENTION_DAYS` (default 30) dias. |
+| `nightly_xml_import` | diário, `XML_IMPORT_WINDOW_START` (default 01:00 Brasília) | Dispara `manage.py import_xml --window --origin cron` num processo separado e espera (ver [xml_import/README.md](../xml_import/README.md#execução)). |
 
 ## Deploy
 

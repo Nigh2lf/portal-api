@@ -423,6 +423,9 @@ XML_IMPORT_WINDOW_START = os.getenv("XML_IMPORT_WINDOW_START", "01:00")
 XML_IMPORT_WINDOW_END = os.getenv("XML_IMPORT_WINDOW_END", "03:00")
 XML_IMPORT_DOWNLOAD_TIMEOUT = int(os.getenv("XML_IMPORT_DOWNLOAD_TIMEOUT", "120"))
 XML_IMPORT_MAX_MB = int(os.getenv("XML_IMPORT_MAX_MB", "80"))
+# Painel e cron rodam a importação em ``manage.py import_xml`` num processo separado, que devolve
+# a memória ao terminar. ``false`` volta a rodar em threads do próprio worker (só para depurar).
+XML_IMPORT_SUBPROCESS = env_bool("XML_IMPORT_SUBPROCESS", default=True)
 # Estatísticas do site (SearchLog, PropertyView) gravadas numa thread de fundo (core/services/deferred_writes.py).
 DEFERRED_WRITES_ENABLED = env_bool("DEFERRED_WRITES_ENABLED", default=True)
 SITE_REVALIDATE_URL = os.getenv("SITE_REVALIDATE_URL", "")

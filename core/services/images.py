@@ -34,7 +34,11 @@ def make_thumbnail(content: bytes, size: tuple[int, int] = THUMB_SIZE) -> Conten
     try:
         from PIL import Image
 
-        img = Image.open(BytesIO(content)).convert("RGB")
+        img = Image.open(BytesIO(content))
+        # JPEG: decodifica já reduzido (escala 1/2, 1/4 ou 1/8, nunca menor que ``size``).
+        # Uma foto de 4000x3000 decodificada inteira ocupa 36 MB; assim fica em torno de 1 MB.
+        img.draft("RGB", size)
+        img = img.convert("RGB")
         img.thumbnail(size)
         out = BytesIO()
         img.save(out, format="JPEG", quality=82, optimize=True)
@@ -84,12 +88,16 @@ def ensure_cover_thumbnail(photo) -> bool:
     return True
 
 
-def gerar_miniaturas_capa(fotos, workers: int = 6, timeout: int = 15, progresso=None, lote: int = 200) -> tuple[int, int]:
+def gerar_miniaturas_capa(
+    fotos, workers: int = 3, timeout: int = 15, progresso=None, lote: int = 200
+) -> tuple[int, int]:
     """
     Gera a miniatura de várias capas: download, redimensionamento e upload em threads
 
     O banco é atualizado só pela thread que chamou, em lotes: as threads não abrem
-    conexão própria (o MySQL do Railway aceita poucas conexões).
+    conexão própria (o MySQL do Railway aceita poucas conexões). Poucas threads de
+    propósito: cada foto decodificada fica inteira na memória enquanto é reduzida, e o
+    gargalo é a rede, não a CPU.
 
     Args:
         fotos: PropertyPhoto de capa sem miniatura (com ``property`` carregado)

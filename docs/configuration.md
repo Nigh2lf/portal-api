@@ -140,6 +140,21 @@ Fluxo recomendado:
 |---|---|---|
 | `RUN_CRON` | `False` | `True` liga o `BackgroundScheduler` em `CoreConfig.ready()`. Em prod, ligue em **um único** processo. Detalhes em [cron.md](cron.md). |
 
+## Importação XML (app `xml_import`)
+
+| Var | Default | Efeito |
+|---|---|---|
+| `XML_IMPORT_WINDOW_START` | `01:00` | Início da janela noturna (horário de Brasília). |
+| `XML_IMPORT_WINDOW_END` | `03:00` | Não inicia anunciante novo depois disso. |
+| `XML_IMPORT_DOWNLOAD_TIMEOUT` | `120` | Segundos para baixar cada feed. |
+| `XML_IMPORT_MAX_MB` | `80` | Tamanho máximo do feed. |
+| `XML_IMPORT_SUBPROCESS` | `True` | Painel e cron rodam `manage.py import_xml` num processo separado, que devolve a memória ao terminar. `False` roda em threads do worker (só para depurar). |
+
+> **Memória no Railway.** O start command já exporta `MALLOC_ARENA_MAX=2` (menos
+> fragmentação do heap com threads) e recicla cada worker do gunicorn a cada ~500
+> requisições (`--max-requests`). Os dois são seguros porque a importação não roda mais
+> dentro do worker. Detalhes em [xml_import/README.md](../xml_import/README.md#execução).
+
 ## Request logging
 
 Middleware `RequestLoggerMiddleware` grava cada request em `LogRequest`.

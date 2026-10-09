@@ -11,15 +11,20 @@
 - ``heartbeat_at`` é renovado a cada checagem; um lote ``RUNNING`` sem batimento há
   ``ABANDONED_AFTER`` (container reiniciado no deploy, por exemplo) é fechado como ``FAILED`` por
   ``active_batch``.
+- O lote pedido pelo painel roda num processo separado (``manage.py import_xml --batch``, ver
+  ``spawn.py``), para a memória da importação não ficar presa no worker do gunicorn. Com
+  ``XML_IMPORT_SUBPROCESS=false`` roda numa thread do próprio worker.
 """
 
 from __future__ import annotations
 
+import gc
 import logging
 import threading
 from datetime import timedelta
 
-from django.db import connection
+from django.conf import settings
+from django.db import connection, transaction
 from django.db.models import F
 from django.utils import timezone
 
@@ -33,6 +38,7 @@ from xml_import.services.execution import (
     import_advertiser,
 )
 from xml_import.services.lock import lock
+from xml_import.services.memory import describe as describe_memory
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +297,17 @@ def _process(batch, origin_label):
                 "updated_at",
             ]
         )
+        # Solta a árvore do feed e as fotos do anunciante antes do próximo; o log mostra
+        # qual anunciante pesa (o pico só cresce).
+        gc.collect()
+        logger.info(
+            "xml_import: lote %s, %d/%d (%s): memória %s",
+            batch.pk,
+            batch.done,
+            batch.total_advertisers,
+            advertiser.name if advertiser is not None else advertiser_id,
+            describe_memory(),
+        )
 
     batch.refresh_from_db(fields=["status"])
     if interrupted or batch.status == Status.CANCELLING:
@@ -342,30 +359,50 @@ def _finish(batch, status, message, pending_as=None):
     )
 
 
-def start_batch_in_background(batch_id, origin_label="manual"):
+def run_batch_safely(batch_id, origin_label="manual"):
     """
-    Dispara ``run_batch`` numa thread: a requisição do painel responde na hora
+    ``run_batch`` que nunca deixa o lote ``RUNNING`` para sempre: erro inesperado fecha como ``FAILED``
 
     Args:
         batch_id: pk do lote ``QUEUED``
         origin_label: rótulo para o histórico de cache
+
+    Returns:
+        o resumo de ``run_batch``, ou ``{"erro": mensagem}``
     """
+    try:
+        return run_batch(batch_id, origin_label=origin_label)
+    except Exception:  # noqa: BLE001
+        logger.exception("xml_import: falha no lote %s", batch_id)
+        message = "Erro inesperado no processamento do lote."
+        batch = XmlImportBatch.objects.filter(
+            pk=batch_id, status__in=XmlImportBatch.ACTIVE_STATUSES
+        ).first()
+        if batch:
+            _finish(batch, Status.FAILED, message, RunStatus.SKIPPED)
+        return {"erro": message}
+
+
+def start_batch_in_background(batch_id, origin_label="manual"):
+    """
+    Dispara o lote sem esperar: a requisição do painel responde na hora
+
+    Num processo separado (padrão, ``XML_IMPORT_SUBPROCESS``) ou numa thread do worker.
+    O disparo espera o commit da transação atual, para o processo filho enxergar o lote.
+
+    Args:
+        batch_id: pk do lote ``QUEUED``
+        origin_label: rótulo para o histórico de cache (só na thread; o processo lê do lote)
+    """
+    if getattr(settings, "XML_IMPORT_SUBPROCESS", True):
+        from xml_import.services.spawn import spawn_import_command
+
+        transaction.on_commit(lambda: spawn_import_command("--batch", batch_id))
+        return
 
     def run():
         try:
-            run_batch(batch_id, origin_label=origin_label)
-        except Exception:  # noqa: BLE001
-            logger.exception("xml_import: falha no lote %s", batch_id)
-            batch = XmlImportBatch.objects.filter(
-                pk=batch_id, status__in=XmlImportBatch.ACTIVE_STATUSES
-            ).first()
-            if batch:
-                _finish(
-                    batch,
-                    Status.FAILED,
-                    "Erro inesperado no processamento do lote.",
-                    RunStatus.SKIPPED,
-                )
+            run_batch_safely(batch_id, origin_label=origin_label)
         finally:
             connection.close()
 

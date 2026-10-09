@@ -6,8 +6,9 @@ do legado. Models continuam em `core/models.py` (`AdvertiserIntegration`, `XmlIm
 
 ## Fluxos
 
-1. **Baixar e normalizar** (`services/download.py`): baixa `AdvertiserIntegration.xml_url`,
-   escolhe o leitor (`formats/`) e grava `media/xml_import/<id do anunciante>.json`
+1. **Baixar e normalizar** (`services/download.py`): baixa `AdvertiserIntegration.xml_url`
+   em blocos para um arquivo temporário, lê o XML em streaming (`formats.read_file`, um
+   imóvel por vez, sem montar a árvore inteira) e grava `media/xml_import/<id do anunciante>.json`
    no formato normalizado (ver `formats/base.py`), substituindo o anterior.
 2. O snapshot do banco do legado (`PI-<id>.xml`) **não existe mais**: o fluxo 3 compara
    direto com o banco.
@@ -53,14 +54,25 @@ ficam em português; identificadores de código são em inglês.
 
 ## Execução
 
+Toda importação roda em `python manage.py import_xml` num **processo separado**
+(`services/spawn.py`), disparado pelo painel ou pelo cron. O motivo é memória: a
+importação chega a centenas de MB (feed, miniaturas com Pillow) e o Python não devolve ao
+sistema o que já pegou; numa thread do gunicorn o worker ficaria desse tamanho até
+reiniciar. O processo filho devolve tudo ao terminar. `XML_IMPORT_SUBPROCESS=false` volta
+ao modelo de threads (só para depurar). O log de cada anunciante no lote traz
+`memória rss=... pico=...` para achar o feed pesado.
+
 - **Cron:** `core/cron/jobs.py::nightly_xml_import`, às `XML_IMPORT_WINDOW_START`
-  (01:00, horário de Brasília). Não inicia anunciante depois de `XML_IMPORT_WINDOW_END`
-  (03:00); quem ficou de fora vai primeiro na noite seguinte. Exige `RUN_CRON=true`.
-  Com vários workers, `GET_LOCK` do MySQL garante uma execução só.
+  (01:00, horário de Brasília), dispara `import_xml --window --origin cron` e espera.
+  Não inicia anunciante depois de `XML_IMPORT_WINDOW_END` (03:00); quem ficou de fora vai
+  primeiro na noite seguinte. Exige `RUN_CRON=true`. Com vários workers, `GET_LOCK` do
+  MySQL garante uma execução só. Alternativa sem APScheduler: um serviço *Cron Schedule*
+  do Railway (mesmo repo) com start command `python manage.py import_xml --window --origin cron`.
 - **Admin:** tela "Importações XML" → "Importar agora" (todos os anunciantes ou os
   escolhidos; simulação com um só), via `POST /api/v1/xml-import-runs/batches/`.
+  O lote é criado `QUEUED` e `import_xml --batch <id>` roda no processo filho.
   Progresso em `GET .../batches/active/`; cancelar em `POST .../batches/<id>/cancel/`.
 - **Comando:** `python manage.py import_xml --advertiser <Id_Cliente|UUID> [--simulate] [--no-download]`,
-  `--all` ou `--window`.
+  `--all`, `--window [--origin cron]` ou `--batch <uuid>`.
 
 Sem e-mail de relatório por enquanto.
