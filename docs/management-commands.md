@@ -110,7 +110,9 @@ Importa catálogos (UF, cidades, bairros, tipos, características, planos,
 integradores), os **portais** e os **imóveis de um anunciante** do banco legado
 para os models novos. Conecta direto no MySQL 5.7 do legado via MySQLdb (variáveis `DB_PORTAL_ANTIGO_*`; o Django 4.2 não aceita MySQL < 8 em `DATABASES`).
 Idempotente: tudo é casado por `legacy_id`; rodar de novo atualiza em vez de
-duplicar.
+duplicar. Imóvel que a importação XML já criou para o anunciante (mesmo código, sem
+`legacy_id`) fica como está e só recebe o `legacy_id`: o feed é mais recente que o legado.
+Código repetido no legado para o mesmo anunciante: fica o primeiro.
 
 ```bash
 python manage.py import_legacy --client-id 5
@@ -130,3 +132,4 @@ O que faz para o anunciante:
   não existem no catálogo), taxas (IPTU anual, demais mensais) e fotos baixadas
   das URLs do legado, com miniatura 480x320 e capa marcada.
 - Preserva `updated_at` com a data de atualização do legado.
+- No fim limpa o cache público inteiro e avisa o site; o resultado sai no resumo (`cache:`).

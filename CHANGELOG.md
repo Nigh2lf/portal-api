@@ -15,6 +15,11 @@ de qual versão deste boilerplate vocês saíram.
 ## [Unreleased]
 
 ### Mudou
+- `import_legacy`: imóvel que a importação XML já criou (mesmo código, sem `legacy_id`)
+  é mantido e só recebe o `legacy_id`, em vez de estourar a chave única
+  `(advertiser, reference_code)`; código repetido no legado fica o primeiro. No fim o
+  cache público é limpo inteiro e o site avisado (`invalidation_batch(everything=True,
+  wait_site=True)`), já que gravações em lote não disparam os sinais de invalidação.
 - Importação XML (`xml_import`) sem segurar memória no worker do gunicorn: painel e
   cron rodam `manage.py import_xml` num processo separado (`XML_IMPORT_SUBPROCESS`;
   novas opções `--batch` e `--origin`); o feed é baixado em blocos e lido em streaming

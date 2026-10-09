@@ -283,23 +283,30 @@ def invalidate_on_commit(scopes=None, portal=None, items=None):
 
 
 @contextmanager
-def invalidation_batch(user=None):
+def invalidation_batch(user=None, *, everything=False, wait_site=False):
     """
     Junta as invalidações de um processamento em lote (importação) em uma só no fim
 
     Args:
         user: identificação para o histórico
+        everything: limpa todos os escopos ao sair, mesmo sem sinal disparado (gravações em lote,
+            ``bulk_create``/``bulk_update``, não passam pelos sinais)
+        wait_site: espera a resposta do site (uso em comando, para mostrar o resultado)
+
+    Yields:
+        dict preenchido ao sair com o retorno de ``invalidate`` (vazio se nada foi invalidado)
     """
+    result = {}
     if getattr(_batch, "active", False):
-        yield
+        yield result
         return
     _batch.active = True
     _batch.scopes = set()
     try:
-        yield
+        yield result
     finally:
-        scopes = sorted(_batch.scopes)
+        scopes = None if everything else sorted(_batch.scopes)
         _batch.active = False
         _batch.scopes = set()
-        if scopes:
-            invalidate(scopes, origin="batch", user=user)
+        if everything or scopes:
+            result.update(invalidate(scopes, origin="batch", user=user, wait_site=wait_site))

@@ -1,6 +1,8 @@
 """import_legacy — importa catálogos, portais e os imóveis de um anunciante do
 banco PHP legado (MySQL 5.7, acessado direto via MySQLdb com ``DB_PORTAL_ANTIGO_*``) para os models
-novos. Idempotente: tudo é casado por ``legacy_id``.
+novos. Idempotente: tudo é casado por ``legacy_id``. Imóvel que a importação XML já criou para
+o anunciante (mesmo código, sem ``legacy_id``) é mantido como está e só ganha o ``legacy_id``:
+o feed é mais recente que o legado.
 
 Uso::
 
@@ -201,11 +203,12 @@ class Command(BaseCommand):
         self.skip_logos = options["skip_logos"]
         self.skip_properties = options["skip_properties"]
         self.stats = {}
-        self.totais = {"criados": 0, "atualizados": 0, "pulados": 0, "fotos": 0}
+        self.totais = {"criados": 0, "atualizados": 0, "vinculados": 0, "pulados": 0, "fotos": 0}
         senha = None
         advertiser = None
 
-        with invalidation_batch(user="import_legacy"):
+        # Gravações em lote não disparam sinais: no fim o cache público é limpo inteiro e o site avisado.
+        with invalidation_batch(user="import_legacy", everything=True, wait_site=True) as cache:
             self.import_states()
             self.import_cities()
             self.import_neighborhoods()
@@ -224,8 +227,16 @@ class Command(BaseCommand):
 
         self.stats["imóveis (total)"] = (
             f"{self.totais['criados']} criados, {self.totais['atualizados']} atualizados, "
-            f"{self.totais['pulados']} pulados, {self.totais['fotos']} links de foto novos"
+            f"{self.totais['vinculados']} já vindos do XML, {self.totais['pulados']} pulados, "
+            f"{self.totais['fotos']} links de foto novos"
         )
+        site = cache.get("site")
+        if site is None:
+            self.stats["cache"] = "API limpa; site não avisado"
+        elif site["ok"]:
+            self.stats["cache"] = "API limpa; site avisado"
+        else:
+            self.stats["cache"] = f"API limpa; aviso ao site falhou: {site['error']}"
         self.stdout.write(self.style.SUCCESS("\nResumo:"))
         for nome, valor in self.stats.items():
             self.stdout.write(f"  {nome}: {valor}")
@@ -259,7 +270,7 @@ class Command(BaseCommand):
                 advertiser, _ = self.import_advertiser(cid, None, mostrar_senha=False)
                 if not self.skip_properties:
                     self.import_properties(advertiser, limit)
-                feitos = (self.totais["criados"] - antes["criados"]) + (self.totais["atualizados"] - antes["atualizados"])
+                feitos = sum(self.totais[k] - antes[k] for k in ("criados", "atualizados", "vinculados"))
                 decorrido = time.monotonic() - inicio
                 restante = decorrido / n * (len(ids) - n)
                 self.stdout.write(
@@ -704,9 +715,14 @@ class Command(BaseCommand):
         if not linhas:
             self.stats["properties"] = "nenhum imóvel"
             return
-        existentes = {p.legacy_id: p for p in Property.objects.filter(legacy_id__in=[r["Id_Imovel"] for r in linhas])}
-        novos, alterados, datas, origem = [], [], [], {}
-        pulados = 0
+        atuais = list(Property.objects.filter(advertiser=advertiser))
+        existentes = {p.legacy_id: p for p in atuais if p.legacy_id is not None}
+        # A chave única é (anunciante, código), sem diferenciar maiúsculas. Imóvel que a importação XML
+        # já criou (sem legacy_id) é a fonte mais recente: fica como está e só recebe o legacy_id.
+        por_codigo = {p.reference_code.strip().lower(): p for p in atuais}
+        novos, alterados, datas, origem, vinculados = [], [], [], {}, []
+        pulados = repetidos = 0
+        vistos = set()
 
         for r in linhas:
             tipo = self.tipos.get(to_int(r["Id_ImovelTipo"])) or self.tipos.get(20)
@@ -714,13 +730,28 @@ class Command(BaseCommand):
             if tipo is None or city is None:
                 pulados += 1
                 continue
+            codigo = (r["ApelidoImovel"] or str(r["Id_Imovel"])).strip()[:45]
+            chave = codigo.lower()
+            if chave in vistos:
+                repetidos += 1  # mesmo código duas vezes no legado: fica o primeiro
+                continue
+            vistos.add(chave)
             bairro = self.bairros.get(to_int(r["Id_Bairro"]))
             prop = existentes.get(r["Id_Imovel"])
+            if prop is None:
+                outro = por_codigo.get(chave)
+                if outro is not None:
+                    if outro.legacy_id is None:
+                        outro.legacy_id = r["Id_Imovel"]
+                        vinculados.append(outro)
+                    else:
+                        repetidos += 1  # código já pertence a outro imóvel do legado
+                    continue
             novo = prop is None
             if novo:
                 prop = Property(legacy_id=r["Id_Imovel"])
             prop.advertiser = advertiser
-            prop.reference_code = (r["ApelidoImovel"] or str(r["Id_Imovel"])).strip()[:45]
+            prop.reference_code = codigo
             prop.status = Property.Status.PUBLISHED
             prop.is_active = to_bool(r["Ativo"])
             destaque = to_int(r["Destaque"])
@@ -776,6 +807,8 @@ class Command(BaseCommand):
             if datas:
                 # bulk_create aplica auto_now; a data real do legado volta aqui (bulk_update não passa pelo auto_now).
                 Property.objects.bulk_update(datas, ["updated_at"], batch_size=500)
+            if vinculados:
+                Property.objects.bulk_update(vinculados, ["legacy_id"], batch_size=500)
 
             through = Property.features.through
             through.objects.filter(property_id__in=pks).delete()
@@ -800,9 +833,13 @@ class Command(BaseCommand):
 
         self.totais["criados"] += len(novos)
         self.totais["atualizados"] += len(alterados)
-        self.totais["pulados"] += pulados
+        self.totais["vinculados"] += len(vinculados)
+        self.totais["pulados"] += pulados + repetidos
         self.totais["fotos"] += fotos_novas
-        self.stats["properties"] = f"{len(novos)} criados, {len(alterados)} atualizados, {pulados} pulados"
+        self.stats["properties"] = (
+            f"{len(novos)} criados, {len(alterados)} atualizados, {len(vinculados)} já vindos do XML, "
+            f"{pulados} pulados, {repetidos} com código repetido"
+        )
 
     @staticmethod
     def montar_taxas(prop, taxa_json):
