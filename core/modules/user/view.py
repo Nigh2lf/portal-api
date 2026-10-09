@@ -203,5 +203,15 @@ class UserViewSet(BaseModelViewSet):
             data={"worked": True, "already_verified": result == "already_verified"}
         )
 
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        """
+        Totais de usuários para o painel inicial
+
+        Returns:
+            envelope com os contadores (ver docs/index.md)
+        """
+        return envelope_success(data=UserService.summary())
+
     def _service(self) -> UserService:
         return UserService(actor=getattr(self.request, "user", None))

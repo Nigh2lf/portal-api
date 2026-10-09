@@ -126,3 +126,10 @@ fotos. Erros: `400` (`error.ids` com UUIDs que não pertencem ao imóvel).
 - `image_url` devolve a URL hospedada ou a externa; `thumbnail_url` devolve a
   miniatura ou, na falta dela, a mesma URL de `image_url`. `cover_photo_url`
   da listagem segue a mesma regra.
+
+## GET /api/v1/properties/summary/
+
+Contadores do painel inicial do admin. Permissão `READ`. Uma consulta, sem paginação.
+`data`: `total` (não excluídos), `visible` (publicado, ativo e de anunciante publicado: o que o site
+mostra, sem o recorte por portal e cidade), `hidden_by_advertiser` (no ar, mas o anunciante está
+despublicado), `inactive` (rascunho ou inativo) e `of_xml_advertisers` (de anunciantes com integração XML ativa).

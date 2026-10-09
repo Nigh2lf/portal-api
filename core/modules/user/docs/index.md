@@ -99,3 +99,9 @@ Body: `email`, `code`. `404` sem corpo quando `EMAIL_VERIFICATION_REQUIRED=False
 Sucesso: `200` com `data: {"worked": true, "already_verified": false}` (e-mail de
 boas-vindas disparado). E-mail já verificado devolve `already_verified: true`.
 Erros: `400` em `error.code` (código errado ou expirado, e-mail inexistente).
+
+## GET /api/v1/users/summary/
+
+Contadores do painel inicial do admin. Permissão `READ`. Uma consulta, sem paginação.
+`data`: `total` (não excluídos), `active` (`is_active`, login liberado), `logged_in` (já entraram alguma vez),
+`of_published_advertisers` (login de anunciante publicado no site) e `admins` (`role = ADMIN`).

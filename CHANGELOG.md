@@ -14,6 +14,10 @@ de qual versão deste boilerplate vocês saíram.
 
 ## [Unreleased]
 
+### Adicionado
+- `GET /api/v1/{users,advertisers,properties}/summary/`: contadores de total e ativos para o
+  painel inicial do admin (uma consulta agregada cada, permissão `READ` da própria tela).
+
 ### Mudou
 - `import_legacy`: imóvel que a importação XML já criou (mesmo código, sem `legacy_id`)
   é mantido e só recebe o `legacy_id`, em vez de estourar a chave única

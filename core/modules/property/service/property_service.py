@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 from rest_framework.exceptions import NotFound
@@ -217,3 +218,24 @@ class PropertyService(SluggedCrudService):
             return PropertyPhoto.objects.get(property=prop, pk=photo_id)
         except (PropertyPhoto.DoesNotExist, ValueError) as exc:
             raise NotFound(_("Foto não encontrada para este imóvel.")) from exc
+
+    @staticmethod
+    def summary():
+        """
+        Totais do painel: imóveis cadastrados e quantos aparecem no site
+
+        ``visible`` segue a regra do site (``public.services.scope.visible_properties``) sem o
+        recorte por portal e cidade: publicado, ativo e de anunciante publicado.
+
+        Returns:
+            dict com ``total``, ``visible``, ``hidden_by_advertiser``, ``inactive`` e ``of_xml_advertisers``
+        """
+        on_air = Q(status=Property.Status.PUBLISHED, is_active=True)
+        advertiser_on = Q(advertiser__is_published=True, advertiser__deleted_at__isnull=True)
+        return Property.objects.filter(deleted_at__isnull=True).aggregate(
+            total=Count("id"),
+            visible=Count("id", filter=on_air & advertiser_on),
+            hidden_by_advertiser=Count("id", filter=on_air & ~advertiser_on),
+            inactive=Count("id", filter=~on_air),
+            of_xml_advertisers=Count("id", filter=Q(advertiser__integration__is_active=True)),
+        )

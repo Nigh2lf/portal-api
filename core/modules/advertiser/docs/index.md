@@ -85,3 +85,9 @@ Resposta `204` com `message` = "Registro deletado com sucesso!".
 
 Sem paginação. Aceita `search`, `portal`, `plan`, `type`, `is_published`.
 `data[]`: `key` (id), `value` (`name`).
+
+## GET /api/v1/advertisers/summary/
+
+Contadores do painel inicial do admin. Permissão `READ`. Uma consulta, sem paginação.
+`data`: `total` (não excluídos), `published` (`is_published`), `published_with_properties`
+(publicados com pelo menos um imóvel publicado e ativo) e `with_active_xml` (integração ativa com URL).

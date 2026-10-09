@@ -1,7 +1,9 @@
 from django.db.models import Count, Q
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
 from core.classes.base_viewset import BaseModelViewSet
+from core.classes.exception_handler import envelope_success
 from core.classes.lookup_options import LookupOptionsMixin
 from core.classes.permission import CustomPermissionClass
 from core.models import Advertiser
@@ -71,6 +73,16 @@ class AdvertiserViewSet(LookupOptionsMixin, BaseModelViewSet):
         serializer.instance = self._service().update(
             serializer.instance, serializer.validated_data
         )
+
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        """
+        Totais de anunciantes para o painel inicial
+
+        Returns:
+            envelope com os contadores (ver docs/index.md)
+        """
+        return envelope_success(data=AdvertiserService.summary())
 
     def _service(self) -> AdvertiserService:
         return AdvertiserService(user=self.request.user)

@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
+from django.db.models import Count, Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
@@ -191,3 +192,20 @@ class UserService:
     def _active_user(email):
         """Busca o usuário ativo pelo e-mail; None se não existir."""
         return User.objects.filter(email=email, is_active=True, deleted_at__isnull=True).first()
+
+    @staticmethod
+    def summary():
+        """
+        Totais do painel: usuários cadastrados, com login liberado, que já entraram e por vínculo
+
+        Returns:
+            dict com ``total``, ``active``, ``logged_in``, ``of_published_advertisers`` e ``admins``
+        """
+        published = Q(advertiser_profile__is_published=True, advertiser_profile__deleted_at__isnull=True)
+        return User.objects.filter(deleted_at__isnull=True).aggregate(
+            total=Count("id"),
+            active=Count("id", filter=Q(is_active=True)),
+            logged_in=Count("id", filter=Q(last_login__isnull=False)),
+            of_published_advertisers=Count("id", filter=published),
+            admins=Count("id", filter=Q(role=User.Role.ADMIN)),
+        )

@@ -1,4 +1,6 @@
-from core.models import Advertiser, AdvertiserCity, AdvertiserIntegration
+from django.db.models import Count, Exists, OuterRef, Q
+
+from core.models import Advertiser, AdvertiserCity, AdvertiserIntegration, Property
 from core.services import SluggedCrudService
 
 UNSET = object()
@@ -74,3 +76,29 @@ class AdvertiserService(SluggedCrudService):
             ]
         )
         advertiser._prefetched_objects_cache = {}
+
+    @staticmethod
+    def summary():
+        """
+        Totais do painel: anunciantes cadastrados, publicados no site, com imóvel no ar e com XML ativo
+
+        Returns:
+            dict com ``total``, ``published``, ``published_with_properties`` e ``with_active_xml``
+        """
+        # Exists em vez de JOIN: contar pelo JOIN multiplicaria cada anunciante pelos imóveis dele.
+        on_site = Property.objects.filter(
+            advertiser=OuterRef("pk"),
+            status=Property.Status.PUBLISHED,
+            is_active=True,
+            deleted_at__isnull=True,
+        )
+        return (
+            Advertiser.objects.filter(deleted_at__isnull=True)
+            .annotate(has_properties=Exists(on_site))
+            .aggregate(
+                total=Count("id"),
+                published=Count("id", filter=Q(is_published=True)),
+                published_with_properties=Count("id", filter=Q(is_published=True, has_properties=True)),
+                with_active_xml=Count("id", filter=Q(integration__is_active=True) & ~Q(integration__xml_url="")),
+            )
+        )

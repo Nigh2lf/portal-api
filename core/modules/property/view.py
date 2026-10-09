@@ -155,5 +155,15 @@ class PropertyViewSet(BaseModelViewSet):
         serializer = PropertyPhotoSerializer(photos, many=True, context={"request": self.request})
         return envelope_success(data=serializer.data, http_status=http_status)
 
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        """
+        Totais de imóveis para o painel inicial
+
+        Returns:
+            envelope com os contadores (ver docs/index.md)
+        """
+        return envelope_success(data=PropertyService.summary())
+
     def _service(self) -> PropertyService:
         return PropertyService(user=self.request.user)
