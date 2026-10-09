@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 import uuid
@@ -12,18 +11,13 @@ from xml_import.services.batches import start_batch_in_background
 from xml_import.services.execution import start_in_background
 
 
-def test_spawn_runs_manage_py_without_cron(mocker, settings):
+def test_spawn_runs_manage_py(mocker, settings):
     popen = mocker.patch.object(subprocess, "Popen")
-    os.environ["RUN_CRON"] = "true"
-    try:
-        spawn.spawn_import_command("--window", "--origin", "cron")
-    finally:
-        os.environ.pop("RUN_CRON", None)
+    spawn.spawn_import_command("--window", "--origin", "cron")
     (cmd,), kwargs = popen.call_args
     assert cmd[0] == sys.executable
     assert cmd[1].endswith("manage.py")
     assert cmd[2:] == ["import_xml", "--window", "--origin", "cron"]
-    assert kwargs["env"]["RUN_CRON"] == "false"
     assert kwargs["cwd"] == str(settings.BASE_DIR)
     # Sessão própria (POSIX) ou grupo próprio (Windows): sobrevive à reciclagem do worker.
     assert kwargs.get("start_new_session") or kwargs.get("creationflags")

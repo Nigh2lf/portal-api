@@ -19,8 +19,8 @@ Cada log grava ``cache_status`` (HIT/MISS do cache público) e a resposta leva o
 header ``X-Cache``. A gravação vai para ``core.services.deferred_writes``.
 - ``LOG_REQUESTS_MAX_BODY`` (int, default ``10_000``) — bytes máximos do body
   parseado. Acima disso o body vira ``"<truncated>"``.
-- ``LOG_REQUESTS_RETENTION_DAYS`` (int, default ``30``) — usado pelo cron
-  ``purge_old_request_logs``.
+- ``LOG_REQUESTS_RETENTION_DAYS`` (int, default ``30``) — usado pelo comando
+  ``purge_logs``.
 """
 
 from __future__ import annotations

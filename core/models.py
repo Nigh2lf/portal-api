@@ -35,6 +35,7 @@ from core.models_base import (
     SoftDeleteManager,
     SoftDeleteMixin,
     SoftDeleteQuerySet,
+    UnindexedAuditMixin,
 )
 
 __all__ = [
@@ -873,7 +874,7 @@ def property_thumbnail_path(instance, filename):
     return f"properties/thumbs/{instance.property.slug}-{uuid.uuid4().hex[:10]}.jpg"
 
 
-class PropertyPhoto(LegacyIdMixin, AbstractModel):
+class PropertyPhoto(LegacyIdMixin, UnindexedAuditMixin, AbstractModel):
     """Legado: ``imovelfoto`` + JSON em ``imovel.Imagem``. Uma linha por foto; ``is_cover`` = miniatura principal.
 
     Fotos de imóveis integrados por XML não são hospedadas: ficam só em
@@ -888,9 +889,16 @@ class PropertyPhoto(LegacyIdMixin, AbstractModel):
     sort_order = models.PositiveSmallIntegerField(default=0)
     is_cover = models.BooleanField(default=False)
 
+    # Maior tabela do banco e a coluna está sempre nula: o índice de 21 MB só custava memória.
+    legacy_id = models.PositiveIntegerField(null=True, blank=True, editable=False)
+
     class Meta(AbstractModel.Meta):
         app_label = "core"
         ordering = ("sort_order",)
+        indexes = [
+            # Capa do card sem ler as demais fotos do imóvel; também serve à FK de `property`.
+            models.Index(fields=["property", "is_cover", "sort_order"]),
+        ]
 
     def __str__(self):
         return f"{self.property_id} #{self.sort_order}"
@@ -907,7 +915,7 @@ class PropertyPhoto(LegacyIdMixin, AbstractModel):
         return self.source_url or None
 
 
-class PropertyFee(LegacyIdMixin, AbstractModel):
+class PropertyFee(LegacyIdMixin, UnindexedAuditMixin, AbstractModel):
     """Legado: ``imoveltaxa`` (IPTU, condomínio...)."""
 
     class Period(models.TextChoices):
@@ -1155,7 +1163,7 @@ class AdImpressionMonthly(AbstractModel):
 # =============================================================================
 
 
-class PropertyView(AbstractModel):
+class PropertyView(UnindexedAuditMixin, AbstractModel):
     """Legado: ``EstatisticaImovelAcesso``. Uma linha por visualização do detalhe."""
 
     property = models.ForeignKey("core.Property", on_delete=models.SET_NULL, null=True, blank=True, related_name="views")
@@ -1177,7 +1185,7 @@ class PropertyView(AbstractModel):
         return f"{self.property_reference_code} @ {self.created_at}"
 
 
-class PropertyContactClick(AbstractModel):
+class PropertyContactClick(UnindexedAuditMixin, AbstractModel):
     """Legado: ``EstatisticaImovelClick``. Clique em "ver telefone" ou WhatsApp."""
 
     property = models.ForeignKey("core.Property", on_delete=models.SET_NULL, null=True, blank=True, related_name="contact_clicks")
@@ -1215,7 +1223,7 @@ class PropertyViewMonthly(AbstractModel):
         return f"{self.advertiser_id} {self.year_month}"
 
 
-class SearchLog(AbstractModel):
+class SearchLog(UnindexedAuditMixin, AbstractModel):
     """Legado: ``PesquisasSalvas``. Alimenta "mais procurados" e o mapa do site."""
 
     portal = models.ForeignKey("core.Portal", on_delete=models.CASCADE, related_name="search_logs")

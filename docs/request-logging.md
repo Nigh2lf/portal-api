@@ -52,40 +52,24 @@ Todas opcionais, com default sensato.
 | Env | Default | Efeito |
 |---|---|---|
 | `LOG_REQUESTS_ENABLED` | `True` | Desliga totalmente o middleware. |
-| `LOG_REQUESTS_RETENTION_DAYS` | `30` | Dias mantidos antes do cron purgar. |
-| `LOG_REQUESTS_PURGE_SCHEDULE` | `03:00` | Horário UTC `HH:MM` em que o cron de purge roda. |
+| `LOG_REQUESTS_RETENTION_DAYS` | `30` | Dias mantidos pelo comando `purge_logs`. |
 | `LOG_REQUESTS_MAX_BODY` | `10000` | Body maior que isso vira `"<truncated>"`. |
 | `LOG_REQUESTS_EXCLUDE_PATHS` | `/admin/,/static/,/media/,/favicon.ico,/api/v1/health,/api/schema,/api/docs,/api/redoc` | Lista CSV de prefixos ignorados. |
 
-## Limpeza automática (cron)
+## Limpeza
 
-Sem isso a tabela explode. O job `purge_old_request_logs` em
-[core/cron/jobs.py](../core/cron/jobs.py) roda diariamente no horário UTC
-definido por `LOG_REQUESTS_PURGE_SCHEDULE` (default **03:00**) e deleta tudo
-com `created_at < now() - LOG_REQUESTS_RETENTION_DAYS`.
-
-Requer `RUN_CRON=true` (ver [cron.md](cron.md)).
-
-> ⚠️ **`LOG_REQUESTS_ENABLED=True` + `RUN_CRON=False` = tabela crescendo
-> pra sempre.** Em prod, garanta uma das opções abaixo:
->
-> 1. Ligar `RUN_CRON=true` em pelo menos um worker (recomendado).
-> 2. Cron externo (crontab do SO, AWS EventBridge, GitHub Actions agendado)
->    chamando `python manage.py shell -c "from core.cron.jobs import
->    purge_old_request_logs; purge_old_request_logs()"`.
-> 3. Desligar `LOG_REQUESTS_ENABLED=False` se você não consome os logs.
-
-Em prod, sem o cron rodando, faça o purge manual:
+O projeto não tem agendador: sem limpeza a tabela só cresce. O comando
+[purge_logs](../core/management/commands/purge_logs.py) apaga tudo com
+`created_at < now() - LOG_REQUESTS_RETENTION_DAYS` (e faz o mesmo para
+`LogModelChange` e `SearchLog`, cada um com a sua retenção):
 
 ```bash
-python manage.py shell -c "
-from datetime import timedelta
-from django.utils import timezone
-from core.models import LogRequest
-cutoff = timezone.now() - timedelta(days=30)
-print(LogRequest.objects.filter(created_at__lt=cutoff).delete())
-"
+python manage.py purge_logs --dry-run   # só conta
+python manage.py purge_logs
 ```
+
+Rode à mão ou por um agendador externo. Se você não consome os logs, desligue
+com `LOG_REQUESTS_ENABLED=False`.
 
 ## Anti-padrões
 

@@ -67,6 +67,39 @@ class AbstractModel(models.Model):
         ordering = ("-created_at",)
 
 
+class UnindexedAuditMixin(models.Model):
+    """``created_by`` / ``updated_by`` sem índice nem constraint, para tabelas de alto volume.
+
+    Liste antes de ``AbstractModel``. Nessas tabelas (fotos, taxas, estatísticas) a autoria
+    quase nunca é preenchida e ninguém filtra por ela, mas cada linha gravada mantinha dois
+    índices que disputavam a memória do MySQL com as leituras do site.
+    """
+
+    created_by = models.ForeignKey(
+        "core.User",
+        null=True,
+        blank=True,
+        editable=False,
+        on_delete=models.SET_NULL,
+        related_name="%(app_label)s_%(class)s_created",
+        db_index=False,
+        db_constraint=False,
+    )
+    updated_by = models.ForeignKey(
+        "core.User",
+        null=True,
+        blank=True,
+        editable=False,
+        on_delete=models.SET_NULL,
+        related_name="%(app_label)s_%(class)s_updated",
+        db_index=False,
+        db_constraint=False,
+    )
+
+    class Meta:
+        abstract = True
+
+
 class SoftDeleteQuerySet(models.QuerySet):
     def alive(self):
         return self.filter(deleted_at__isnull=True)
@@ -132,8 +165,8 @@ class LogRequest(models.Model):
     e busca. `params` guarda a querystring serializada como JSON. `data`
     guarda o body JSON (com chaves sensíveis redatadas).
 
-    A tabela cresce rápido: por padrão um cron limpa registros com mais de
-    ``LOG_REQUESTS_RETENTION_DAYS`` (30) dias. Ver ``core/cron/jobs.py``.
+    A tabela cresce rápido: ``manage.py purge_logs`` apaga registros com mais de
+    ``LOG_REQUESTS_RETENTION_DAYS`` (30) dias.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -189,7 +222,7 @@ class LogModelChange(models.Model):
     Para limitar a tabelas específicas, use a env ``MODEL_AUDIT_MODELS``
     (csv ``app_label.ModelName``). Default: ``core.User``.
 
-    Tabela é purgada por ``purge_old_audit_logs`` após
+    Tabela é purgada por ``manage.py purge_logs`` após
     ``MODEL_AUDIT_RETENTION_DAYS`` (default 30) dias.
     """
 

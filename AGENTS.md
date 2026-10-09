@@ -22,7 +22,7 @@ Este projeto tem padrões fortes. Reusar > recriar. Sempre.
 | Endpoint **público do site** (`AllowAny`, consumido pelo portal-web) | app `public/` ([public/README.md](public/README.md)) | `public/modules/<modulo>/`, rota em `public/urls.py`, throttle `public`; nunca em `core/modules/` |
 | Resposta de API | `core/classes/base_viewset.py::_response_format` | Envelope `{success, status, message, data, error}` |
 | Exception handler | `core/classes/exception_handler.py` | Já configurado. Só levantar `ValidationError`, `PermissionDenied`, etc. |
-| Job em background (cron) | `core/cron/jobs.py` + `core/cron/scheduler.py` | Adicione função em `jobs.py` e registre em `scheduler.start()` com `id=` + `replace_existing=True`. Ligado por `RUN_CRON=true` |
+| Tarefa periódica | `core/management/commands/` (ex.: `purge_logs.py`) | Não há agendador no processo web: escreva um comando e agende por fora (ver `docs/deploy.md`) |
 | Teste novo | `core/tests/` | Estilo pytest funcional. Use fixtures (`client`, `user`, `admin_user`), `@pytest.mark.django_db` p/ banco, `mocker` p/ patches |
 
 **Antes de criar qualquer arquivo novo:** rode busca textual no repo pelo conceito.
@@ -194,7 +194,7 @@ sobe (`ModuleNotFoundError`). Rode `python manage.py check` depois de mexer.
 > **Não renomeie `core/modules/` para `core/apps/`.** O pacote colidiria com
 > `core/apps.py` (que define `CoreConfig`): em Python o diretório vence, o
 > `ready()` nunca roda e você perde — silenciosamente — os system checks de
-> segurança, o cron e a auditoria de models. `manage.py check` passa limpo
+> segurança e a auditoria de models. `manage.py check` passa limpo
 > mesmo assim, então a quebra não aparece.
 
 ## 1.2. Skills operacionais — use ANTES de escrever view/serializer

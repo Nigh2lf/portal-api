@@ -22,7 +22,6 @@ python-dotenv==1.0.1
 mysqlclient==2.1.1
 drf-spectacular==0.27.2
 django-csp==4.0
-APScheduler==3.10.4
 django-otp==1.5.4
 qrcode==7.4.2
 gunicorn==23.0.0

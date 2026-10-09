@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db.models import Case, CharField, Count, Prefetch, Q, Value, When
+from django.db.models import Case, CharField, Count, Q, Value, When
 from django.utils import timezone
 
 from core.models import (
@@ -11,11 +11,10 @@ from core.models import (
     Neighborhood,
     Portal,
     Property,
-    PropertyPhoto,
     PropertyType,
     SearchLog,
 )
-from public.services.scope import photos_count_subquery
+from public.services.scope import visible_properties, with_card_data
 
 PURPOSE_CASE = Case(
     When(sale_price__isnull=False, then=Value("SALE")),
@@ -31,27 +30,10 @@ class HomeService:
 
     def scope(self):
         """Imóveis visíveis no portal: publicados, de anunciantes ativos no portal (ou combinados) e nas cidades cobertas."""
-        portais = [self.portal.pk, *self.portal.combined_portals.values_list("pk", flat=True)]
-        cidades = self.portal.portal_cities.values_list("city_id", flat=True)
-        return Property.objects.filter(
-            status=Property.Status.PUBLISHED,
-            is_active=True,
-            deleted_at__isnull=True,
-            advertiser__is_published=True,
-            advertiser__deleted_at__isnull=True,
-            advertiser__portal_id__in=portais,
-            city_id__in=cidades,
-        )
+        return visible_properties(self.portal)
 
     def cards_queryset(self, queryset):
-        return (
-            queryset.select_related("property_type", "city", "city__state", "neighborhood", "advertiser")
-            .prefetch_related(
-                Prefetch("photos", queryset=PropertyPhoto.objects.order_by("sort_order", "created_at")),
-                "features",
-            )
-            .annotate(photos_count=photos_count_subquery())
-        )
+        return with_card_data(queryset)
 
     def featured(self, limit=12):
         """Destaques do portal; completa com os mais recentes quando há menos que o limite."""

@@ -16,7 +16,6 @@ Bem-vindo. Esta pasta contém a documentação completa do boilerplate. Cada arq
 | [cep.md](cep.md) | Endpoint público `/api/v1/cep/<cep>/` + service `lookup_cep` (ViaCEP com cache em `PostalCode`). |
 | [public-assets.md](public-assets.md) | Imagens públicas vs. privadas (`PublicAsset` × `User.profile_image`). |
 | [management-commands.md](management-commands.md) | `createuser`, `createpermission`, `seedpermissions`. |
-| [cron.md](cron.md) | Jobs em background com APScheduler (`RUN_CRON`, `core/cron/`). |
 | [request-logging.md](request-logging.md) | Middleware que registra cada request em `LogRequest` (com sanitização e purge automático). |
 | [model-audit.md](model-audit.md) | Signals que registram CREATE/UPDATE/DELETE em models declarados (`LogModelChange`). |
 | [testing-and-quality.md](testing-and-quality.md) | Como rodar testes (pytest + pytest-django + pytest-mock), `ruff`, pre-commit. |

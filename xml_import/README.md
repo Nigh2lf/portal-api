@@ -55,19 +55,18 @@ ficam em português; identificadores de código são em inglês.
 ## Execução
 
 Toda importação roda em `python manage.py import_xml` num **processo separado**
-(`services/spawn.py`), disparado pelo painel ou pelo cron. O motivo é memória: a
+(`services/spawn.py`), disparado pelo painel. O motivo é memória: a
 importação chega a centenas de MB (feed, miniaturas com Pillow) e o Python não devolve ao
 sistema o que já pegou; numa thread do gunicorn o worker ficaria desse tamanho até
 reiniciar. O processo filho devolve tudo ao terminar. `XML_IMPORT_SUBPROCESS=false` volta
 ao modelo de threads (só para depurar). O log de cada anunciante no lote traz
 `memória rss=... pico=...` para achar o feed pesado.
 
-- **Cron:** `core/cron/jobs.py::nightly_xml_import`, às `XML_IMPORT_WINDOW_START`
-  (01:00, horário de Brasília), dispara `import_xml --window --origin cron` e espera.
-  Não inicia anunciante depois de `XML_IMPORT_WINDOW_END` (03:00); quem ficou de fora vai
-  primeiro na noite seguinte. Exige `RUN_CRON=true`. Com vários workers, `GET_LOCK` do
-  MySQL garante uma execução só. Alternativa sem APScheduler: um serviço *Cron Schedule*
-  do Railway (mesmo repo) com start command `python manage.py import_xml --window --origin cron`.
+- **Janela noturna:** não há agendador no serviço web (removido em 2026-10-09). Para
+  importar toda noite, agende por fora `python manage.py import_xml --window --origin cron`
+  (ex.: serviço *Cron Schedule* do Railway no mesmo repo). Não inicia anunciante depois de
+  `XML_IMPORT_WINDOW_END` (03:00); quem ficou de fora vai primeiro na noite seguinte.
+  `GET_LOCK` do MySQL garante uma execução só.
 - **Admin:** tela "Importações XML" → "Importar agora" (todos os anunciantes ou os
   escolhidos; simulação com um só), via `POST /api/v1/xml-import-runs/batches/`.
   O lote é criado `QUEUED` e `import_xml --batch <id>` roda no processo filho.

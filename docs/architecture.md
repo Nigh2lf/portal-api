@@ -8,7 +8,6 @@ Layout de pastas, camadas e padrões usados no boilerplate.
 config/                  # settings, urls, storage S3
 core/                    # único app do boilerplate
   classes/               # base classes (BaseModelViewSet, permission classes, exception handler)
-  cron/                  # APScheduler (jobs.py + scheduler.py)
   management/commands/   # comandos manage.py
   migrations/
   models.py              # User, Profile, Permission, PublicAsset, etc.
@@ -135,6 +134,7 @@ pytest core
 
 Detalhes em [testing-and-quality.md](testing-and-quality.md).
 
-## Cron
+## Tarefas agendadas
 
-Jobs em background via APScheduler. Liga com `RUN_CRON=true`. Detalhes em [cron.md](cron.md).
+Não há agendador no processo web. Importação XML e limpeza de logs são comandos
+(`import_xml --window`, `purge_logs`); ver [deploy.md](deploy.md#tarefas-agendadas).

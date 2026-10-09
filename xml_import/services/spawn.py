@@ -30,9 +30,7 @@ def spawn_import_command(*args) -> subprocess.Popen:
         o ``Popen`` (saída vai para o stdout/stderr do servidor, ou seja, para os logs)
     """
     cmd = [sys.executable, str(settings.BASE_DIR / "manage.py"), "import_xml", *map(str, args)]
-    # O filho não liga o APScheduler: só o processo web agenda jobs.
-    env = {**os.environ, "RUN_CRON": "false"}
-    kwargs: dict = {"cwd": str(settings.BASE_DIR), "env": env, "close_fds": True}
+    kwargs: dict = {"cwd": str(settings.BASE_DIR), "close_fds": True}
     if os.name == "nt":
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:

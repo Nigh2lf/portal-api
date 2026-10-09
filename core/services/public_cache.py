@@ -56,6 +56,8 @@ HISTORY_KEY = "history"
 HISTORY_SIZE = 50
 _MISS = object()
 _batch = threading.local()
+_builds: dict[str, list] = {}
+_builds_guard = threading.Lock()
 _request_hits: contextvars.ContextVar[list[bool] | None] = contextvars.ContextVar("public_cache_hits", default=None)
 
 
@@ -108,6 +110,22 @@ def _version_keys(scope, portal=None, item=None):
     return keys
 
 
+@contextmanager
+def _single_build(key):
+    """Serializa, dentro do processo, a montagem de uma mesma chave (o site costuma pedir a mesma busca em paralelo)."""
+    with _builds_guard:
+        entry = _builds.setdefault(key, [threading.RLock(), 0])
+        entry[1] += 1
+    try:
+        with entry[0]:
+            yield
+    finally:
+        with _builds_guard:
+            entry[1] -= 1
+            if not entry[1]:
+                _builds.pop(key, None)
+
+
 def cached(scope, builder, *, portal=None, params=None, item=None, timeout=None):
     """
     Devolve o valor em cache ou executa ``builder`` e guarda o resultado
@@ -139,8 +157,13 @@ def cached(scope, builder, *, portal=None, params=None, item=None, timeout=None)
     _track(hit is not _MISS)
     if hit is not _MISS:
         return hit
-    value = builder()
-    _data().set(key, value, timeout or TIMEOUTS.get(scope, 600))
+    with _single_build(key):
+        # Quem esperou outra thread montar a mesma chave reaproveita o resultado dela.
+        hit = _data().get(key, _MISS)
+        if hit is not _MISS:
+            return hit
+        value = builder()
+        _data().set(key, value, timeout or TIMEOUTS.get(scope, 600))
     return value
 
 

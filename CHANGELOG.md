@@ -27,6 +27,27 @@ de qual versão deste boilerplate vocês saíram.
   fotos), agora entre todos os imóveis do mesmo tipo e cidade, não só os 200 mais recentes;
   `portal_ids`/`city_ids` usam as relações já pré-carregadas do portal em cache (duas
   consultas a menos por leitura pública fora do cache).
+- Cards de imóvel (busca, relacionados, favoritos, destaques da home e listagem do admin)
+  carregam só a foto de capa; a galeria inteira fica para o detalhe
+  (`with_card_data(..., all_photos=True)`). Na busca de 30 imóveis eram 535 fotos lidas, agora 30.
+  A home passa a usar `visible_properties`/`with_card_data` em vez de cópias das mesmas regras.
+- `PropertyPhoto` (**exige migration**): sem índice em `legacy_id`, sem índice nem constraint em
+  `created_by`/`updated_by` (as colunas ficam) e com índice novo
+  `(property, is_cover, sort_order)`. Tira ~65 MB de índices que só existiam para serem
+  mantidos na importação. `PropertyFee`, `PropertyView`, `PropertyContactClick` e `SearchLog`
+  também perdem índice e constraint de autoria (`UnindexedAuditMixin`).
+- Busca pública: contadores das abas, preço máximo e total saem de uma consulta agregada em
+  vez de três. Totais por anunciante (diretório, hotsite e detalhe do imóvel) e
+  `views_count` do painel deixam de usar `Count` com join + `distinct`.
+- `public_cache.cached`: pedidos simultâneos da mesma chave no mesmo processo montam o valor
+  uma vez só; os demais esperam e reaproveitam.
+
+### Removido
+- Agendador interno (APScheduler): pacote `core/cron/`, `RUN_CRON`,
+  `LOG_REQUESTS_PURGE_SCHEDULE`, `MODEL_AUDIT_PURGE_SCHEDULE`, `docs/cron.md` e a dependência
+  `APScheduler`. A importação noturna (`import_xml --window --origin cron`) e a limpeza de logs
+  (novo comando `purge_logs`, que inclui `SearchLog` com `SEARCH_LOG_RETENTION_DAYS`) passam a
+  depender de execução manual ou agendador externo.
 - `import_legacy`: imóvel que a importação XML já criou (mesmo código, sem `legacy_id`)
   é mantido e só recebe o `legacy_id`, em vez de estourar a chave única
   `(advertiser, reference_code)`; código repetido no legado fica o primeiro. No fim o

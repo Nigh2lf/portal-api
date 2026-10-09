@@ -1,5 +1,3 @@
-import os
-
 from django.apps import AppConfig
 from django.conf import settings
 
@@ -10,16 +8,10 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         # Registra os system checks de segurança (auditoria de permissões em ViewSets).
-        from core import checks  # noqa: F401
-
-        # Cron (APScheduler). Liga só quando RUN_CRON=true para evitar
-        # duplicação no autoreload do runserver e em workers múltiplos.
-        if os.environ.get("RUN_CRON", "").lower() == "true":
-            from core.cron import scheduler
-
-            scheduler.start()
-
-        from core import signals_public_cache
+        from core import (
+            checks,  # noqa: F401
+            signals_public_cache,
+        )
 
         signals_public_cache.connect()
 

@@ -68,25 +68,64 @@ def has_photo_exists():
     return Exists(PropertyPhoto.objects.filter(property=OuterRef("pk")))
 
 
-def with_card_data(queryset):
-    """Preload para o card de imóvel: zero query por linha no serializer."""
+def with_card_data(queryset, all_photos=False):
+    """
+    Preload para o card de imóvel: zero query por linha no serializer
+
+    Args:
+        queryset: imóveis a carregar
+        all_photos: ``True`` traz a galeria inteira (detalhe); o card só usa a capa
+
+    Returns:
+        queryset com joins, fotos, características e ``photos_count``
+    """
+    photos = PropertyPhoto.objects.order_by("sort_order", "created_at")
+    if not all_photos:
+        # ~17 fotos por imóvel, espalhadas pela tabela (PK UUID): carregar todas para mostrar
+        # uma era a maior leitura de disco da busca.
+        photos = photos.filter(is_cover=True)
     return (
         queryset.select_related("property_type", "city", "city__state", "neighborhood", "advertiser")
-        .prefetch_related(
-            Prefetch("photos", queryset=PropertyPhoto.objects.order_by("sort_order", "created_at")),
-            "features",
-        )
+        .prefetch_related(Prefetch("photos", queryset=photos), "features")
         .annotate(photos_count=photos_count_subquery())
     )
 
 
-def property_visibility_q(portal: Portal, prefix="properties"):
-    """Mesmas regras de `visible_properties` como Q para usar em annotate(Count(...))."""
-    return Q(
-        **{
-            f"{prefix}__status": Property.Status.PUBLISHED,
-            f"{prefix}__is_active": True,
-            f"{prefix}__deleted_at__isnull": True,
-            f"{prefix}__city_id__in": city_ids(portal),
-        }
+ADVERTISER_TOTAL_FIELDS = ("total_properties", "total_sale", "total_rent", "total_seasonal")
+
+
+def attach_advertiser_totals(portal: Portal, advertisers):
+    """
+    Preenche nos anunciantes os totais de imóveis visíveis no portal, por objetivo
+
+    Uma consulta agrupada em ``Property`` para todos; ``Count("properties", distinct=True)``
+    no queryset de anunciantes multiplica as linhas largas do anunciante pelos imóveis.
+
+    Args:
+        portal: portal da requisição
+        advertisers: anunciantes já visíveis no portal
+
+    Returns:
+        lista dos mesmos anunciantes com ``total_properties``, ``total_sale``, ``total_rent`` e ``total_seasonal``
+    """
+    advertisers = list(advertisers)
+    if not advertisers:
+        return advertisers
+    rows = (
+        visible_properties(portal)
+        .filter(advertiser_id__in=[a.pk for a in advertisers])
+        .order_by()
+        .values("advertiser_id")
+        .annotate(
+            total_properties=Count("id"),
+            total_sale=Count("id", filter=Q(sale_price__isnull=False)),
+            total_rent=Count("id", filter=Q(rent_price__isnull=False)),
+            total_seasonal=Count("id", filter=Q(seasonal_rent_price__isnull=False)),
+        )
     )
+    totals = {row["advertiser_id"]: row for row in rows}
+    for advertiser in advertisers:
+        row = totals.get(advertiser.pk, {})
+        for name in ADVERTISER_TOTAL_FIELDS:
+            setattr(advertiser, name, row.get(name, 0))
+    return advertisers

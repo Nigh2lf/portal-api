@@ -120,23 +120,14 @@ ADMIN_MFA_ENABLED=True
 Antes de subir com o flag em `True`, garanta que pelo menos um superuser já
 tem TOTPDevice **Confirmed** cadastrado (ver [auth-permissions.md](auth-permissions.md#mfa-no-django-admin)). Caso contrário, ninguém entra em `/admin/`.
 
-## Cron (APScheduler)
+## Tarefas agendadas
 
-Desligado por padrão. Para ligar em prod:
+O serviço web não agenda nada (o APScheduler interno foi removido em 2026-10-09
+para o processo ficar menor). O que antes era job vira comando, rodado à mão ou
+por um agendador externo, como um serviço *Cron Schedule* do Railway no mesmo repo:
 
-```bash
-RUN_CRON=True
-```
-
-**Só ligue em UM processo** (worker/container dedicado). Em gunicorn com N
-workers, `RUN_CRON=True` em todos faz cada job rodar N vezes. Detalhes em
-[cron.md](cron.md#deploy).
-
-A importação XML noturna é a exceção tolerada: com `RUN_CRON=True` em todos os
-workers, o `GET_LOCK` do MySQL garante que só um dispara, e o trabalho pesado roda
-num processo separado (`manage.py import_xml`), não no worker. Alternativa mais
-limpa no Railway: um serviço *Cron Schedule* do mesmo repo com start command
-`python manage.py import_xml --window --origin cron` e `RUN_CRON=False` no serviço web.
+- `python manage.py import_xml --window --origin cron`: importação XML da janela noturna.
+- `python manage.py purge_logs`: apaga `LogRequest`, `LogModelChange` e `SearchLog` antigos.
 
 ## Comandos no deploy
 

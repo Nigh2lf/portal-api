@@ -27,7 +27,6 @@ Por padrão **desligado**. Em `.env`:
 ```dotenv
 MODEL_AUDIT_ENABLED=True
 MODEL_AUDIT_RETENTION_DAYS=30
-MODEL_AUDIT_PURGE_SCHEDULE=03:15
 MODEL_AUDIT_MODELS=core.User
 ```
 
@@ -61,7 +60,7 @@ valor. Em fluxos **sem request**:
 
 - `python manage.py shell` → `actor=None`
 - `python manage.py createuser` → `actor=None`
-- Cron jobs → `actor=None`
+- Comandos e importações → `actor=None`
 
 Para anotar manualmente o actor em scripts, use:
 
@@ -91,22 +90,13 @@ Hard delete (`Model.objects.filter(...).delete()` direto, ou `User`
 chamado em modelos sem soft delete) gera evento `DELETE` com snapshot
 do objeto antes da remoção.
 
-## Limpeza automática (cron)
+## Limpeza
 
-Sem isso a tabela cresce sem fim. O job `purge_old_audit_logs` em
-[core/cron/jobs.py](../core/cron/jobs.py) roda diariamente no horário UTC
-definido por `MODEL_AUDIT_PURGE_SCHEDULE` (default **03:15**)
-e deleta tudo com `created_at < now() - MODEL_AUDIT_RETENTION_DAYS`.
-
-Requer `RUN_CRON=true` (ver [cron.md](cron.md)).
-
-> ⚠️ **`MODEL_AUDIT_ENABLED=True` + `RUN_CRON=False` = tabela crescendo
-> indefinidamente.** Em prod, garanta uma das opções:
->
-> 1. `RUN_CRON=true` em pelo menos um worker.
-> 2. Cron externo: `python manage.py shell -c "from core.cron.jobs import
->    purge_old_audit_logs; purge_old_audit_logs()"`.
-> 3. `MODEL_AUDIT_ENABLED=False` se você não consome os logs.
+O projeto não tem agendador: sem limpeza a tabela cresce sem fim. O comando
+`python manage.py purge_logs` apaga tudo com
+`created_at < now() - MODEL_AUDIT_RETENTION_DAYS` (ver
+[request-logging.md](request-logging.md#limpeza)). Rode à mão ou por um
+agendador externo, ou deixe `MODEL_AUDIT_ENABLED=False` se não consome os logs.
 
 ## Custo
 

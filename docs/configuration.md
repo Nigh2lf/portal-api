@@ -134,12 +134,6 @@ Fluxo recomendado:
 - `env_bool("NOME", default=False)` — aceita `1/true/yes/on`.
 - `env_list("NOME", default=[])` — split por vírgula com strip.
 
-## Cron (APScheduler)
-
-| Var | Default | Descrição |
-|---|---|---|
-| `RUN_CRON` | `False` | `True` liga o `BackgroundScheduler` em `CoreConfig.ready()`. Em prod, ligue em **um único** processo. Detalhes em [cron.md](cron.md). |
-
 ## Importação XML (app `xml_import`)
 
 | Var | Default | Efeito |
@@ -148,7 +142,7 @@ Fluxo recomendado:
 | `XML_IMPORT_WINDOW_END` | `03:00` | Não inicia anunciante novo depois disso. |
 | `XML_IMPORT_DOWNLOAD_TIMEOUT` | `120` | Segundos para baixar cada feed. |
 | `XML_IMPORT_MAX_MB` | `80` | Tamanho máximo do feed. |
-| `XML_IMPORT_SUBPROCESS` | `True` | Painel e cron rodam `manage.py import_xml` num processo separado, que devolve a memória ao terminar. `False` roda em threads do worker (só para depurar). |
+| `XML_IMPORT_SUBPROCESS` | `True` | O painel roda `manage.py import_xml` num processo separado, que devolve a memória ao terminar. `False` roda em threads do worker (só para depurar). |
 
 > **Memória no Railway.** O start command já exporta `MALLOC_ARENA_MAX=2` (menos
 > fragmentação do heap com threads) e recicla cada worker do gunicorn a cada ~500
@@ -163,16 +157,14 @@ Detalhes em [request-logging.md](request-logging.md).
 | Var | Default | Descrição |
 |---|---|---|
 | `LOG_REQUESTS_ENABLED` | `True` | Liga/desliga totalmente o middleware. |
-| `LOG_REQUESTS_RETENTION_DAYS` | `30` | Dias mantidos antes do cron `purge_old_request_logs` apagar. |
-| `LOG_REQUESTS_PURGE_SCHEDULE` | `03:00` | Horário UTC `HH:MM` em que o cron de purge roda. |
+| `LOG_REQUESTS_RETENTION_DAYS` | `30` | Dias mantidos pelo comando `purge_logs`. |
+| `SEARCH_LOG_RETENTION_DAYS` | `120` | Dias de `SearchLog` mantidos pelo comando `purge_logs` ("mais procurados" lê os últimos 90). |
 | `LOG_REQUESTS_MAX_BODY` | `10000` | Bytes máximos do body parseado; acima disso vira `"<truncated>"`. |
 | `LOG_REQUESTS_EXCLUDE_PATHS` | `/admin/,/static/,/media/,/favicon.ico,/api/v1/health,/api/schema,/api/docs,/api/redoc` | Prefixos de URL ignorados pelo log (csv). |
 
-> ⚠️ **Atenção:** `LOG_REQUESTS_ENABLED=True` **sem** `RUN_CRON=true` (ou cron
-> externo equivalente) faz a tabela crescer indefinidamente. Em prod, ligue
-> o cron em algum processo ou agende `python manage.py shell -c
-> "from core.cron.jobs import purge_old_request_logs; purge_old_request_logs()"`
-> via crontab/EventBridge.
+> ⚠️ **Atenção:** o projeto não tem agendador. Com `LOG_REQUESTS_ENABLED=True` a
+> tabela cresce até alguém rodar `python manage.py purge_logs` (à mão ou por um
+> agendador externo).
 
 ## Auditoria de mudanças em models
 
@@ -182,9 +174,8 @@ Signals registram CREATE/UPDATE/DELETE em models declarados na tabela
 | Var | Default | Descrição |
 |---|---|---|
 | `MODEL_AUDIT_ENABLED` | `False` | Liga os signals em `CoreConfig.ready()`. |
-| `MODEL_AUDIT_RETENTION_DAYS` | `30` | Dias mantidos antes do cron `purge_old_audit_logs` apagar. |
-| `MODEL_AUDIT_PURGE_SCHEDULE` | `03:15` | Horário UTC `HH:MM` em que o cron de purge roda. |
+| `MODEL_AUDIT_RETENTION_DAYS` | `30` | Dias mantidos pelo comando `purge_logs`. |
 | `MODEL_AUDIT_MODELS` | `core.User` | Csv `app_label.ModelName` dos models auditados. |
 
-> Mesmo aviso vale: ligar `MODEL_AUDIT_ENABLED=True` sem `RUN_CRON=true` (ou
-> purge externo) faz a tabela crescer sem limite.
+> Mesmo aviso vale: com `MODEL_AUDIT_ENABLED=True` a tabela cresce até rodarem
+> `python manage.py purge_logs`.

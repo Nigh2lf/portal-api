@@ -1,5 +1,6 @@
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquery
+from django.db.models.functions import Coalesce
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -14,7 +15,7 @@ from advertiser.services import CurrentAdvertiserMixin
 from core.classes.base_viewset import BaseModelViewSet
 from core.classes.exception_handler import envelope_success
 from core.classes.permission import CustomPermissionClass
-from core.models import Property, PropertyPhoto
+from core.models import Property, PropertyPhoto, PropertyView
 from core.modules.property.serializer import (
     PropertyPhotoReorderSerializer,
     PropertyPhotoUploadSerializer,
@@ -59,6 +60,13 @@ class AdvertiserPropertyViewSet(CurrentAdvertiserMixin, BaseModelViewSet):
         return AdvertiserPropertySerializer
 
     def get_queryset(self):
+        views = (
+            PropertyView.objects.filter(property=OuterRef("pk"))
+            .order_by()
+            .values("property")
+            .annotate(total=Count("id"))
+            .values("total")
+        )
         queryset = (
             Property.objects.filter(advertiser=self.advertiser, deleted_at__isnull=True)
             .select_related("property_type", "city", "city__state", "neighborhood")
@@ -69,7 +77,7 @@ class AdvertiserPropertyViewSet(CurrentAdvertiserMixin, BaseModelViewSet):
                 "features",
                 "fees",
             )
-            .annotate(views_count=Count("views", distinct=True))
+            .annotate(views_count=Coalesce(Subquery(views, output_field=IntegerField()), 0))
         )
         if self.action == "list":
             queryset = self._apply_list_filters(queryset)

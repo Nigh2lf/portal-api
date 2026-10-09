@@ -340,7 +340,6 @@ URL_FORGOT_PASSWORD = os.getenv("URL_FORGOT_PASSWORD")
 LOG_REQUESTS_ENABLED = env_bool("LOG_REQUESTS_ENABLED", default=True)
 LOG_REQUESTS_RETENTION_DAYS = int(os.getenv("LOG_REQUESTS_RETENTION_DAYS", "30"))
 LOG_REQUESTS_MAX_BODY = int(os.getenv("LOG_REQUESTS_MAX_BODY", "10000"))
-LOG_REQUESTS_PURGE_SCHEDULE = os.getenv("LOG_REQUESTS_PURGE_SCHEDULE", "03:00")
 LOG_REQUESTS_EXCLUDE_PATHS = [
     p.strip()
     for p in os.getenv(
@@ -350,13 +349,14 @@ LOG_REQUESTS_EXCLUDE_PATHS = [
     if p.strip()
 ]
 LOG_REQUESTS_SKIP_READ_PATHS = env_list("LOG_REQUESTS_SKIP_READ_PATHS", default=[])
+# Buscas do site (SearchLog): "mais procurados" só lê os últimos 90 dias.
+SEARCH_LOG_RETENTION_DAYS = int(os.getenv("SEARCH_LOG_RETENTION_DAYS", "120"))
 
 # ---------------------------------------------------------------------------
 # Auditoria de mudanças em models (CREATE/UPDATE/DELETE -> LogModelChange)
 # ---------------------------------------------------------------------------
 MODEL_AUDIT_ENABLED = env_bool("MODEL_AUDIT_ENABLED", default=False)
 MODEL_AUDIT_RETENTION_DAYS = int(os.getenv("MODEL_AUDIT_RETENTION_DAYS", "30"))
-MODEL_AUDIT_PURGE_SCHEDULE = os.getenv("MODEL_AUDIT_PURGE_SCHEDULE", "03:15")
 MODEL_AUDIT_MODELS = [
     label.strip()
     for label in os.getenv("MODEL_AUDIT_MODELS", "core.User").split(",")
@@ -423,7 +423,7 @@ XML_IMPORT_WINDOW_START = os.getenv("XML_IMPORT_WINDOW_START", "01:00")
 XML_IMPORT_WINDOW_END = os.getenv("XML_IMPORT_WINDOW_END", "03:00")
 XML_IMPORT_DOWNLOAD_TIMEOUT = int(os.getenv("XML_IMPORT_DOWNLOAD_TIMEOUT", "120"))
 XML_IMPORT_MAX_MB = int(os.getenv("XML_IMPORT_MAX_MB", "80"))
-# Painel e cron rodam a importação em ``manage.py import_xml`` num processo separado, que devolve
+# O painel roda a importação em ``manage.py import_xml`` num processo separado, que devolve
 # a memória ao terminar. ``false`` volta a rodar em threads do próprio worker (só para depurar).
 XML_IMPORT_SUBPROCESS = env_bool("XML_IMPORT_SUBPROCESS", default=True)
 # Estatísticas do site (SearchLog, PropertyView) gravadas numa thread de fundo (core/services/deferred_writes.py).

@@ -58,16 +58,15 @@ class PropertyViewSet(BaseModelViewSet):
         return PropertySerializer
 
     def get_queryset(self):
-        queryset = (
-            Property.objects.filter(deleted_at__isnull=True)
-            .select_related("advertiser", "property_type", "city", "city__state", "neighborhood")
-            .prefetch_related(
-                Prefetch("photos", queryset=PropertyPhoto.objects.order_by("sort_order"))
-            )
+        queryset = Property.objects.filter(deleted_at__isnull=True).select_related(
+            "advertiser", "property_type", "city", "city__state", "neighborhood"
         )
+        photos = PropertyPhoto.objects.order_by("sort_order")
         if self.action == "list":
-            return queryset
-        return queryset.prefetch_related("features", "fees")
+            return queryset.prefetch_related(
+                Prefetch("photos", queryset=photos.filter(is_cover=True))
+            )
+        return queryset.prefetch_related(Prefetch("photos", queryset=photos), "features", "fees")
 
     def create(self, request, *args, **kwargs):
         """

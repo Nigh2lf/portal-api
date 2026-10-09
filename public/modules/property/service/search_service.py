@@ -156,20 +156,24 @@ class SearchService:
     def search(self, filters: SearchFilters):
         resolved = self.resolve(filters)
         base = self.base_queryset(filters, resolved)
+        price_field = PURPOSE_PRICE_FIELD[filters.purpose]
+        # Contadores das abas e preço máximo saem da mesma varredura; sem faixa de preço,
+        # o total da aba ativa é o próprio contador (uma consulta em vez de três).
         counters = base.aggregate(
             sale=Count("id", filter=Q(sale_price__isnull=False)),
             rent=Count("id", filter=Q(rent_price__isnull=False)),
             seasonal=Count("id", filter=Q(seasonal_rent_price__isnull=False)),
+            max_price=Max(price_field),
         )
-        price_field = PURPOSE_PRICE_FIELD[filters.purpose]
+        max_price = counters.pop("max_price") or Decimal(0)
         qs = base.filter(**{f"{price_field}__isnull": False})
-        max_price = qs.aggregate(m=Max(price_field))["m"] or Decimal(0)
-        if filters.price_min is not None:
-            qs = qs.filter(**{f"{price_field}__gte": filters.price_min})
-        if filters.price_max is not None:
-            qs = qs.filter(**{f"{price_field}__lte": filters.price_max})
-
-        total = qs.count()
+        total = counters[filters.purpose.lower()]
+        if filters.price_min is not None or filters.price_max is not None:
+            if filters.price_min is not None:
+                qs = qs.filter(**{f"{price_field}__gte": filters.price_min})
+            if filters.price_max is not None:
+                qs = qs.filter(**{f"{price_field}__lte": filters.price_max})
+            total = qs.count()
         total_pages = max(1, -(-total // filters.page_size))
         page = min(max(1, filters.page), total_pages)
         inicio = (page - 1) * filters.page_size

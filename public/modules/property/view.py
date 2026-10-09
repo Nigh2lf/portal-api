@@ -1,4 +1,4 @@
-from django.db.models import Count, Q
+from django.db.models import Q
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import AllowAny
@@ -17,7 +17,7 @@ from public.modules.property.serializer import (
     PublicSearchResultSerializer,
 )
 from public.modules.property.service import PURPOSE_PRICE_FIELD, SearchFilters, SearchService
-from public.services.scope import cached_portal, property_visibility_q, visible_properties, with_card_data
+from public.services.scope import attach_advertiser_totals, cached_portal, visible_properties, with_card_data
 from public.services.sender import client_ip, ensure_sender_allowed
 
 MAX_IDS = 100
@@ -112,9 +112,9 @@ class PublicPropertyViewSet(BaseViewSet):
         Returns:
             ``{"data": {property, related, related_links}, "track": {property_id, reference_code, advertiser_id}}``
         """
-        qs = with_card_data(visible_properties(portal)).select_related("advertiser", "advertiser__portal").prefetch_related("fees")
+        qs = with_card_data(visible_properties(portal), all_photos=True).select_related("advertiser", "advertiser__portal").prefetch_related("fees")
         prop = self._visible_property(portal, slug, qs)
-        self._annotate_advertiser_totals(prop.advertiser, portal)
+        attach_advertiser_totals(portal, [prop.advertiser])
         related = SearchService(portal).related(prop) if com_relacionados else []
         ctx = {"request": self.request}
         return {
@@ -223,18 +223,6 @@ class PublicPropertyViewSet(BaseViewSet):
             is_mobile=is_mobile(request),
         )
         return envelope_success(data={"ok": True})
-
-    @staticmethod
-    def _annotate_advertiser_totals(advertiser, portal):
-        vis = property_visibility_q(portal)
-        totais = Advertiser.objects.filter(pk=advertiser.pk).aggregate(
-            total_properties=Count("properties", filter=vis, distinct=True),
-            total_sale=Count("properties", filter=vis & Q(properties__sale_price__isnull=False), distinct=True),
-            total_rent=Count("properties", filter=vis & Q(properties__rent_price__isnull=False), distinct=True),
-            total_seasonal=Count("properties", filter=vis & Q(properties__seasonal_rent_price__isnull=False), distinct=True),
-        )
-        for chave, valor in totais.items():
-            setattr(advertiser, chave, valor)
 
     @staticmethod
     def _related_links(prop):
