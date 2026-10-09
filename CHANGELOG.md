@@ -19,6 +19,14 @@ de qual versão deste boilerplate vocês saíram.
   painel inicial do admin (uma consulta agregada cada, permissão `READ` da própria tela).
 
 ### Mudou
+- Desempenho das rotas que passavam de 800 ms no `LogRequest` de produção:
+  `GET /api/v1/advertisers/` conta os imóveis por subconsulta em vez de `LEFT JOIN` +
+  `GROUP BY` (380 ms → 1 ms no banco; a contagem da paginação deixa de fazer o join);
+  os relacionados (`.../properties/{slug}/related/`) escolhem os 6 ids mais próximos em
+  preço no banco e só eles carregam fotos e características (antes 200 imóveis e ~4.500
+  fotos), agora entre todos os imóveis do mesmo tipo e cidade, não só os 200 mais recentes;
+  `portal_ids`/`city_ids` usam as relações já pré-carregadas do portal em cache (duas
+  consultas a menos por leitura pública fora do cache).
 - `import_legacy`: imóvel que a importação XML já criou (mesmo código, sem `legacy_id`)
   é mantido e só recebe o `legacy_id`, em vez de estourar a chave única
   `(advertiser, reference_code)`; código repetido no legado fica o primeiro. No fim o

@@ -25,11 +25,13 @@ def cached_portal(slug):
 
 
 def portal_ids(portal: Portal):
-    return [portal.pk, *portal.combined_portals.values_list("pk", flat=True)]
+    """Ids do portal e dos combinados; sem query quando o portal veio de `portal_queryset`."""
+    return [portal.pk, *(p.pk for p in portal.combined_portals.all())]
 
 
 def city_ids(portal: Portal):
-    return list(portal.portal_cities.values_list("city_id", flat=True))
+    """Ids das cidades cobertas; sem query quando o portal veio de `portal_queryset`."""
+    return [pc.city_id for pc in portal.portal_cities.all()]
 
 
 def visible_properties(portal: Portal):

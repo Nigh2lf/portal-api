@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
+from django.db.models.functions import Abs
 from rest_framework.exceptions import ValidationError
 
 from core.models import City, Neighborhood, Portal, Property, PropertyType, SearchLog
@@ -219,11 +220,15 @@ class SearchService:
         purpose = "SALE" if prop.sale_price is not None else "RENT" if prop.rent_price is not None else "SEASONAL"
         price_field = PURPOSE_PRICE_FIELD[purpose]
         preco = getattr(prop, price_field) or Decimal(0)
-        qs = (
+        # Duas etapas, como na busca: o banco escolhe os ids mais próximos e só eles
+        # carregam joins, fotos e características (antes eram 200 imóveis e ~4.500 fotos para devolver 6).
+        ids = list(
             visible_properties(self.portal)
             .exclude(pk=prop.pk)
-            .filter(property_type=prop.property_type, city=prop.city, **{f"{price_field}__isnull": False})
+            .filter(property_type_id=prop.property_type_id, city_id=prop.city_id, **{f"{price_field}__isnull": False})
+            .annotate(price_gap=Abs(F(price_field) - preco))
+            .order_by("price_gap", "-updated_at")
+            .values_list("pk", flat=True)[:limit]
         )
-        candidatos = list(with_card_data(qs).annotate(price_value=F(price_field))[:200])
-        candidatos.sort(key=lambda p: abs((p.price_value or Decimal(0)) - preco))
-        return candidatos[:limit]
+        por_id = {p.pk: p for p in with_card_data(Property.objects.filter(pk__in=ids)).annotate(price_value=F(price_field))}
+        return [por_id[i] for i in ids if i in por_id]

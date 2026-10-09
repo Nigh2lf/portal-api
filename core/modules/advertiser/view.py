@@ -1,4 +1,5 @@
-from django.db.models import Count, Q
+from django.db.models import Count, IntegerField, OuterRef, Subquery
+from django.db.models.functions import Coalesce
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 
@@ -6,7 +7,7 @@ from core.classes.base_viewset import BaseModelViewSet
 from core.classes.exception_handler import envelope_success
 from core.classes.lookup_options import LookupOptionsMixin
 from core.classes.permission import CustomPermissionClass
-from core.models import Advertiser
+from core.models import Advertiser, Property
 from core.modules.advertiser.serializer import (
     AdvertiserDetailSerializer,
     AdvertiserListSerializer,
@@ -33,14 +34,17 @@ class AdvertiserViewSet(LookupOptionsMixin, BaseModelViewSet):
         return AdvertiserSerializer
 
     def get_queryset(self):
+        totals = (
+            Property.objects.filter(advertiser=OuterRef("pk"), deleted_at__isnull=True)
+            .order_by()
+            .values("advertiser")
+            .annotate(total=Count("id"))
+            .values("total")
+        )
         queryset = (
             Advertiser.objects.filter(deleted_at__isnull=True)
             .select_related("plan", "portal")
-            .annotate(
-                properties_count=Count(
-                    "properties", filter=Q(properties__deleted_at__isnull=True), distinct=True
-                )
-            )
+            .annotate(properties_count=Coalesce(Subquery(totals, output_field=IntegerField()), 0))
         )
         if self.action in ("list", "options_list"):
             return queryset
