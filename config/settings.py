@@ -507,6 +507,14 @@ _csp_img_src = tuple(
 )
 _csp_connect_src = tuple(env_list("CSP_CONNECT_SRC", default=["'self'"]))
 
+# Com S3, o STATIC_URL aponta para o bucket: o CSS, o JS e as fontes do admin,
+# do DRF e do Swagger vêm de lá e precisam estar liberados no CSP.
+if AWS_STORAGE_BUCKET_NAME:
+    _static_origin = f"https://{AWS_S3_CUSTOM_DOMAIN}"
+    _csp_script_src += (_static_origin,)
+    _csp_style_src += (_static_origin,)
+    _csp_font_src += (_static_origin,)
+
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
         "default-src": _csp_default_src,
