@@ -397,7 +397,10 @@ if REDIS_URL:
         "cache_versions": {
             "BACKEND": "django.core.cache.backends.redis.RedisCache",
             "LOCATION": f"{REDIS_URL}/0",
-            "KEY_PREFIX": "portal:versions",
+            # As chaves com hash tag `{...}` caem no mesmo slot. Assim o get_many/set_many
+            # (MGET/MSET) do public_cache funciona em Redis/Valkey em modo cluster, como o
+            # ElastiCache Serverless, que recusa comandos multi-chave entre slots (CROSSSLOT).
+            "KEY_PREFIX": "{portal:versions}",
             "TIMEOUT": None,
             "OPTIONS": _REDIS_OPTIONS,
         },
