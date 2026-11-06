@@ -34,7 +34,8 @@ class PublicPropertyViewSet(BaseViewSet):
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "public"
     lookup_field = "slug"
-    lookup_value_regex = r"[a-z0-9-]+"
+    # O slugify mantém "_", e os códigos do XML trazem (ex.: ...-idi1682_1-2941019).
+    lookup_value_regex = r"[a-z0-9_-]+"
 
     def get_portal(self):
         portal = cached_portal(self.kwargs.get("portal_slug"))
