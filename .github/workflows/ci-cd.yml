@@ -78,6 +78,16 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
     steps:
+      - name: Check deploy secrets
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          if [[ -z "$EC2_HOST" || -z "$EC2_SSH_KEY" ]]; then
+            echo "::error::EC2_HOST and EC2_SSH_KEY secrets are not set. Run ci-cd/set-github-secrets.sh (see ci-cd/README.md in the workspace)."
+            exit 1
+          fi
+
       - name: Runner public IP
         id: ip
         run: echo "ip=$(curl -fsS https://checkip.amazonaws.com)" >> "$GITHUB_OUTPUT"
