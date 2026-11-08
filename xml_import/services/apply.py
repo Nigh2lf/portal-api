@@ -9,6 +9,8 @@ Regras (as do legado, com a inconsistência de destaque entre insert e update un
 - imóvel do banco que não está no feed (ou ficou acima do limite) é excluído;
 - feed sem imóveis não exclui nada;
 - código barrado pela moderação, cidade desconhecida ou sem preço: ignorado e registrado;
+- depois da gravação, a capa de cada imóvel novo ou trocado vira miniatura; capa que não baixa
+  rejeita o imóvel (``services/photos.py``), revisto na importação seguinte;
 - código repetido no banco para o mesmo anunciante: fica um, os demais são excluídos.
 """
 
@@ -27,6 +29,7 @@ from core.modules.property.service.property_service import PropertyService
 from core.services.slug import unique_slug
 from xml_import.formats.base import normalize_name
 from xml_import.services.cancellation import check_cancelled
+from xml_import.services.photos import PHOTO_REJECTION_PREFIX
 from xml_import.services.resolver import Resolver
 
 FIELDS = (
@@ -216,11 +219,13 @@ class Applier:
         result = Result(total_feed=len(properties))
         if not properties:
             return result
+        # Só a moderação barra o código. Rejeição automática por foto de capa (``photos.py``)
+        # é revista a cada importação: o imóvel entra de novo e a capa é tentada outra vez.
         blocked = {
             c.lower()
-            for c in RejectedProperty.objects.filter(advertiser=self.advertiser).values_list(
-                "property_reference_code", flat=True
-            )
+            for c in RejectedProperty.objects.filter(advertiser=self.advertiser)
+            .exclude(reason__startswith=PHOTO_REJECTION_PREFIX)
+            .values_list("property_reference_code", flat=True)
         }
         existing, duplicates = {}, []
         # Ativos primeiro: com o mesmo código, fica o ativo mais antigo; os demais são excluídos.

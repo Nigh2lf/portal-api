@@ -13,19 +13,18 @@ from django.utils import timezone
 
 from core.models import (
     Advertiser,
-    PropertyPhoto,
     ScheduledTaskRun,
     XmlImportBatch,
     XmlImportError,
     XmlImportRun,
 )
-from core.services.images import gerar_miniaturas_capa
 from core.services.public_cache import invalidation_batch
 from xml_import.services import files
 from xml_import.services.apply import Applier
 from xml_import.services.cancellation import ImportCancelled, check_cancelled
 from xml_import.services.download import ImportFailed, download_and_normalize
 from xml_import.services.lock import lock
+from xml_import.services.photos import process_cover_photos
 
 logger = logging.getLogger(__name__)
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
@@ -97,6 +96,8 @@ def import_advertiser(
             else:
                 with invalidation_batch(user=f"xml_import:{origin_label}"):
                     result = applier.run(data["imoveis"], cancel_check=cancel_check)
+                    # Capa de quem entrou ou mudou vira miniatura; capa que falha rejeita o imóvel.
+                    photos = process_cover_photos(advertiser, run)
         except ImportFailed as exc:
             if run:
                 XmlImportError.objects.create(advertiser=advertiser, run=run, message=str(exc))
@@ -139,11 +140,14 @@ def import_advertiser(
             ],
             batch_size=500,
         )
+        rejected = len(photos["rejeitados_sem_foto"])
         run.status = XmlImportRun.Status.SUCCESS
         run.finished_at = timezone.now()
         run.total_properties = result.total_feed
-        run.valid_properties = len(result.created) + len(result.changed) + result.unchanged
-        run.invalid_properties = len(result.ignored)
+        run.valid_properties = max(
+            0, len(result.created) + len(result.changed) + result.unchanged - rejected
+        )
+        run.invalid_properties = len(result.ignored) + rejected
         run.save(
             update_fields=[
                 "status",
@@ -157,14 +161,10 @@ def import_advertiser(
         advertiser.integration.last_imported_at = run.finished_at
         advertiser.integration.save(update_fields=["last_imported_at", "updated_at"])
 
-        covers = PropertyPhoto.objects.filter(
-            property__advertiser=advertiser, is_cover=True, thumbnail=""
-        ).select_related("property")
-        thumbnails, without_thumbnail = gerar_miniaturas_capa(covers)
         return {
             **result.summary(),
-            "miniaturas": thumbnails,
-            "capas_sem_miniatura": without_thumbnail,
+            "miniaturas": photos["miniaturas"],
+            "rejeitados_sem_foto": rejected,
             "formato": data["formato"],
         }
 

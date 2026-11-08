@@ -89,7 +89,7 @@ def ensure_cover_thumbnail(photo) -> bool:
 
 
 def gerar_miniaturas_capa(
-    fotos, workers: int = 3, timeout: int = 15, progresso=None, lote: int = 200
+    fotos, workers: int = 3, timeout: int = 15, progresso=None, lote: int = 200, failed=None
 ) -> tuple[int, int]:
     """
     Gera a miniatura de várias capas: download, redimensionamento e upload em threads
@@ -105,6 +105,7 @@ def gerar_miniaturas_capa(
         timeout: segundos por download
         progresso: função ``(feitas, total, ok, falhas, restante_s)`` chamada a cada 100
         lote: tamanho do ``bulk_update``
+        failed: lista que recebe as fotos cuja miniatura não saiu (download ou imagem inválida)
 
     Returns:
         (geradas, falhas)
@@ -121,31 +122,34 @@ def gerar_miniaturas_capa(
     inicio = time.monotonic()
 
     def processar(foto):
-        if foto.image:
-            with foto.image.open("rb") as f:
-                conteudo = f.read()
-        else:
-            conteudo = download(foto.source_url, timeout=timeout) if foto.source_url else None
-        thumb = make_thumbnail(conteudo) if conteudo else None
-        if thumb is None:
+        # Qualquer problema (download, imagem inválida, storage) devolve a foto sem nome:
+        # quem chamou decide o que fazer com o imóvel.
+        try:
+            if foto.image:
+                with foto.image.open("rb") as f:
+                    conteudo = f.read()
+            else:
+                conteudo = download(foto.source_url, timeout=timeout) if foto.source_url else None
+            thumb = make_thumbnail(conteudo) if conteudo else None
+            if thumb is None:
+                return foto, None
+            return foto, campo.storage.save(campo.generate_filename(foto, thumb.name), thumb)
+        except Exception:  # noqa: BLE001 - uma foto com problema não interrompe as demais
+            logger.warning("Falha ao gerar miniatura de %s", foto.pk, exc_info=True)
             return foto, None
-        return foto, campo.storage.save(campo.generate_filename(foto, thumb.name), thumb)
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futuros = [pool.submit(processar, foto) for foto in fotos]
         for n, futuro in enumerate(as_completed(futuros), 1):
-            try:
-                foto, nome = futuro.result()
-            except Exception:  # noqa: BLE001 - uma foto com problema não interrompe as demais
-                logger.warning("Falha ao gerar miniatura", exc_info=True)
-                falhas += 1
-                continue
+            foto, nome = futuro.result()
             if nome:
                 foto.thumbnail.name = nome
                 pendentes.append(foto)
                 ok += 1
             else:
                 falhas += 1
+                if failed is not None:
+                    failed.append(foto)
             if len(pendentes) >= lote:
                 PropertyPhoto.objects.bulk_update(pendentes, ["thumbnail"], batch_size=lote)
                 pendentes = []

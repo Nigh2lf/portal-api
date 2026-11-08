@@ -5,6 +5,13 @@
 Referências de imóveis do XML barradas pela moderação (a importação pula
 estes códigos).
 
+A importação também grava rejeições **automáticas**, com `reason` iniciado por
+`Foto de capa indisponível`: o imóvel veio no feed, mas a foto de capa não pôde
+ser baixada ou não é uma imagem válida. Ele sai do site até a foto voltar; a
+cada importação a capa é tentada de novo e o registro é removido quando ela
+funciona. Essas rejeições não barram o código nas próximas importações e não
+precisam ser apagadas à mão (ver `xml_import/README.md`, fluxo 4).
+
 Toda resposta usa o envelope `{success, status, message, data, error}`.
 
 | Método | URL | Permissão |

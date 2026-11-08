@@ -14,7 +14,12 @@ do legado. Models continuam em `core/models.py` (`AdvertiserIntegration`, `XmlIm
    direto com o banco.
 3. **Comparar e aplicar** (`services/apply.py`): casa pelo código do anunciante e grava
    em lote o que é novo ou mudou; exclui o que saiu do feed; registra os ignorados.
-   Gera a miniatura (S3) só das capas novas ou trocadas.
+4. **Capas** (`services/photos.py`): baixa a capa de cada imóvel novo ou trocado (a foto
+   marcada no feed, senão a primeira) e grava a miniatura 480x320 no storage (S3). Imóvel
+   cuja capa não baixa ou não é imagem válida **é rejeitado**: sai do site (soft delete) e
+   entra em `RejectedProperty` com motivo "Foto de capa indisponível: <url>", além de um
+   `XmlImportError` na execução. A rejeição é automática e revista a cada importação: se a
+   foto voltar, o imóvel volta e o registro some.
 
 `services/execution.py` orquestra um anunciante (`import_advertiser`) e a janela noturna
 (`run_window`). `services/batches.py` cuida dos **lotes** (`XmlImportBatch`): fila de
@@ -45,7 +50,10 @@ ficam em português; identificadores de código são em inglês.
 - Limite do plano: entram os N primeiros do feed; fotos até o limite; destaque e
   superdestaque na ordem do feed até os limites do anunciante.
 - Cidade desconhecida ou sem preço: ignorado (o imóvel existente fica como está).
-  Código barrado em `RejectedProperty`: ignorado. Tudo vira `XmlImportError` da execução.
+  Código barrado em `RejectedProperty` pela moderação: ignorado. Tudo vira `XmlImportError`
+  da execução.
+- Capa que não baixa: imóvel rejeitado (fluxo 4). Só a moderação barra o código nas próximas
+  importações; a rejeição por foto é tentada de novo a cada noite.
 - Tipo desconhecido → "Outros"; bairro desconhecido → texto em `neighborhood_name`.
   Nomes casam sem acento/maiúsculas, também pelos `import_aliases`.
 - Fora do feed (ou acima do limite) → **excluído** (as estatísticas ficam no anunciante:
