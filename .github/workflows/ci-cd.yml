@@ -77,7 +77,8 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    environment: production
+    # No `environment:` here: it would change the OIDC `sub` claim to `environment:<name>`,
+    # and the role's trust policy matches `ref:refs/heads/main`.
     env:
       EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
       APP_DIR: /home/portal-api
