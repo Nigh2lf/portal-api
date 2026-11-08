@@ -19,8 +19,8 @@ from core.modules.property.view import PropertyViewSet
 from core.modules.property_inquiry.view import PropertyInquiryViewSet
 from core.modules.property_request.view import PropertyRequestViewSet
 from core.modules.property_type.view import PropertyTypeViewSet
-from core.modules.rejected_property.view import RejectedPropertyViewSet
 from core.modules.public_cache.view import PublicCacheViewSet
+from core.modules.rejected_property.view import RejectedPropertyViewSet
 from core.modules.scheduled_task_run.view import ScheduledTaskRunViewSet
 from core.modules.state.view import StateViewSet
 from core.modules.tip.view import TipViewSet

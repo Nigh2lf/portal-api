@@ -6,6 +6,7 @@ Autenticação: header ``api-key``.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import urllib.request
@@ -60,10 +61,8 @@ class BrevoEmailService(EmailService):
                 return False
         except HTTPError as e:
             detalhe = ""
-            try:
+            with contextlib.suppress(Exception):  # corpo opcional
                 detalhe = e.read().decode("utf-8", errors="replace")[:300]
-            except Exception:  # noqa: BLE001, S110 - corpo opcional
-                pass
             logger.error("Brevo HTTPError %s: %s %s", e.code, e.reason, detalhe)
             return False
         except (URLError, TimeoutError) as e:

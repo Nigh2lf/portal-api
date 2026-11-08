@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from core.classes.serializer_fields import ImageUrlField, image_url
+from core.classes.serializer_fields import image_url
 from core.models import Feature, Property, PropertyFee, PropertyPhoto
 
 PROPERTY_WRITE_FIELDS = (

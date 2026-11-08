@@ -51,7 +51,7 @@ def make_thumbnail(content: bytes, size: tuple[int, int] = THUMB_SIZE) -> Conten
 def download(url: str, timeout: int = DOWNLOAD_TIMEOUT) -> bytes | None:
     """Baixa a imagem externa; None em qualquer falha."""
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "portal-api"})
+        req = urllib.request.Request(url, headers={"User-Agent": "portal-api"})  # noqa: S310 - URL do anunciante
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 - URL do anunciante
             return resp.read()
     except Exception:  # noqa: BLE001 - foto externa indisponível não é erro fatal

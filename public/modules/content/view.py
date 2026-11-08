@@ -6,7 +6,11 @@ from core.classes.base_viewset import BaseViewSet
 from core.classes.exception_handler import envelope_success
 from core.classes.pagination import StandardPagination
 from core.services.public_cache import cached
-from public.modules.content.serializer import PublicPostDetailSerializer, PublicPostListSerializer, PublicTipSerializer
+from public.modules.content.serializer import (
+    PublicPostDetailSerializer,
+    PublicPostListSerializer,
+    PublicTipSerializer,
+)
 from public.modules.content.service import ContentService
 from public.services.scope import cached_portal
 

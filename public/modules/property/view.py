@@ -17,7 +17,12 @@ from public.modules.property.serializer import (
     PublicSearchResultSerializer,
 )
 from public.modules.property.service import PURPOSE_PRICE_FIELD, SearchFilters, SearchService
-from public.services.scope import attach_advertiser_totals, cached_portal, visible_properties, with_card_data
+from public.services.scope import (
+    attach_advertiser_totals,
+    cached_portal,
+    visible_properties,
+    with_card_data,
+)
 from public.services.sender import client_ip, ensure_sender_allowed
 
 MAX_IDS = 100

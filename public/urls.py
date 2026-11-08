@@ -8,7 +8,11 @@ from rest_framework.routers import DefaultRouter
 
 from public.modules.advertiser.view import PublicAdvertiserViewSet
 from public.modules.content.view import PublicPostViewSet, PublicTipViewSet
-from public.modules.lead.view import PublicAdvertiserLeadViewSet, PublicContactMessageViewSet, PublicPropertyRequestViewSet
+from public.modules.lead.view import (
+    PublicAdvertiserLeadViewSet,
+    PublicContactMessageViewSet,
+    PublicPropertyRequestViewSet,
+)
 from public.modules.plan.view import PublicAdPlacementViewSet, PublicPlanViewSet
 from public.modules.portal.view import PublicPortalViewSet
 from public.modules.property.view import PublicPropertyViewSet

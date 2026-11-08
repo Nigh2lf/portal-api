@@ -151,7 +151,7 @@ def cached(scope, builder, *, portal=None, params=None, item=None, timeout=None)
         return builder()
     stamp = ".".join(str(versions.get(k, 0)) for k in vkeys)
     raw = json.dumps(params or {}, sort_keys=True, default=str)
-    digest = hashlib.sha1(f"{scope}|{portal}|{item}|{raw}|{stamp}".encode()).hexdigest()
+    digest = hashlib.sha1(f"{scope}|{portal}|{item}|{raw}|{stamp}".encode(), usedforsecurity=False).hexdigest()
     key = f"pub:{scope}:{portal or '-'}:{digest}"
     hit = _data().get(key, _MISS)
     _track(hit is not _MISS)
@@ -218,14 +218,14 @@ def notify_site(tags):
     if not url:
         return {"ok": False, "status": None, "error": "SITE_REVALIDATE_URL não configurada."}
     body = json.dumps({"tags": tags}).encode()
-    req = urllib.request.Request(
+    req = urllib.request.Request(  # noqa: S310 - URL interna configurada em SITE_REVALIDATE_URL
         url,
         data=body,
         method="POST",
         headers={"Content-Type": "application/json", "x-revalidate-secret": getattr(settings, "SITE_REVALIDATE_SECRET", "")},
     )
     try:
-        with urllib.request.urlopen(req, timeout=getattr(settings, "SITE_REVALIDATE_TIMEOUT", 5)) as res:
+        with urllib.request.urlopen(req, timeout=getattr(settings, "SITE_REVALIDATE_TIMEOUT", 5)) as res:  # noqa: S310
             return {"ok": 200 <= res.status < 300, "status": res.status, "error": ""}
     except urllib.error.HTTPError as exc:
         return {"ok": False, "status": exc.code, "error": f"HTTP {exc.code}"}

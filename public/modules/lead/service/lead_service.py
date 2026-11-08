@@ -1,6 +1,14 @@
 from rest_framework import serializers
 
-from core.models import AdvertiserLead, City, ContactMessage, Neighborhood, Portal, PropertyRequest, PropertyType
+from core.models import (
+    AdvertiserLead,
+    City,
+    ContactMessage,
+    Neighborhood,
+    Portal,
+    PropertyRequest,
+    PropertyType,
+)
 from public.services.sender import client_ip, ensure_sender_allowed
 
 

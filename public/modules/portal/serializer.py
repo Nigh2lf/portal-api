@@ -3,7 +3,17 @@ import re
 from rest_framework import serializers
 
 from core.classes.serializer_fields import ImageUrlField, image_url
-from core.models import Ad, Banner, City, Feature, Neighborhood, Portal, PortalMenuItem, Property, PropertyType
+from core.models import (
+    Ad,
+    Banner,
+    City,
+    Feature,
+    Neighborhood,
+    Portal,
+    PortalMenuItem,
+    Property,
+    PropertyType,
+)
 from core.modules.property.serializer import cover_photo_url
 
 EXCERPT_LENGTH = 220
