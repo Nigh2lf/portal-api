@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
-from django.db.models.functions import Abs
+from django.db.models.functions import Abs, Coalesce
 from rest_framework.exceptions import ValidationError
 
 from core.models import City, Neighborhood, Portal, Property, PropertyType, SearchLog
@@ -13,19 +13,24 @@ PURPOSE_PRICE_FIELD = {"SALE": "sale_price", "RENT": "rent_price", "SEASONAL": "
 ORDERINGS = {"recent": "-updated_at", "price_asc": "price_value", "price_desc": "-price_value"}
 MAX_PAGE_SIZE = 60
 MAX_NEIGHBORHOODS = 20
+MAX_PROPERTY_TYPES = 20
+# Quartos e vagas: 1, 2, 3 e 4 (4 significa "4 ou mais"), vários ao mesmo tempo.
+MAX_COUNT_OPTION = 4
 
 
 @dataclass
 class SearchFilters:
     purpose: str = "SALE"
-    property_type: str | None = None
+    property_types: list[str] = field(default_factory=list)
     city: str | None = None
     neighborhoods: list[str] = field(default_factory=list)
     condominium: str | None = None
     bedrooms: list[int] = field(default_factory=list)
-    parking: int | None = None
+    parking: list[int] = field(default_factory=list)
     price_min: Decimal | None = None
     price_max: Decimal | None = None
+    area_min: Decimal | None = None
+    area_max: Decimal | None = None
     code: str | None = None
     advertiser: str | None = None
     ordering: str = "recent"
@@ -64,29 +69,42 @@ class SearchFilters:
         ordering = params.get("ordering") or "recent"
         if ordering not in ORDERINGS:
             raise ValidationError({"ordering": ["Use recent, price_asc ou price_desc."]})
-        bedrooms = []
-        for parte in str(params.get("bedrooms") or "").split(","):
-            parte = parte.strip()
-            if parte.isdigit() and 1 <= int(parte) <= 4:
-                bedrooms.append(int(parte))
+        def counts(nome):
+            """`1,2,4` -> [1, 2, 4]; acima de 4 vira 4 (links antigos com `parking=6`)."""
+            valores = set()
+            for parte in str(params.get(nome) or "").split(","):
+                parte = parte.strip()
+                if parte.isdigit() and int(parte) >= 1:
+                    valores.add(min(int(parte), MAX_COUNT_OPTION))
+            return sorted(valores)
+
+        def slugs(nome, maximo, rotulo):
+            lista = []
+            for parte in str(params.get(nome) or "").split(","):
+                parte = parte.strip()
+                if parte and parte not in lista:
+                    lista.append(parte)
+            if len(lista) > maximo:
+                raise ValidationError({nome: [f"Escolha no máximo {maximo} {rotulo}."]})
+            return lista
+
+        def area(nome):
+            valor = decimal(nome)
+            return valor if valor is not None and valor > 0 else None
+
         page_size = inteiro("page_size", 1) or default_page_size
-        bairros = []
-        for parte in str(params.get("neighborhood") or "").split(","):
-            parte = parte.strip()
-            if parte and parte not in bairros:
-                bairros.append(parte)
-        if len(bairros) > MAX_NEIGHBORHOODS:
-            raise ValidationError({"neighborhood": [f"Escolha no máximo {MAX_NEIGHBORHOODS} bairros."]})
         return cls(
             purpose=purpose,
-            property_type=params.get("property_type") or None,
+            property_types=slugs("property_type", MAX_PROPERTY_TYPES, "tipos de imóvel"),
             city=params.get("city") or None,
-            neighborhoods=bairros,
+            neighborhoods=slugs("neighborhood", MAX_NEIGHBORHOODS, "bairros"),
             condominium=condominium,
-            bedrooms=sorted(set(bedrooms)),
-            parking=inteiro("parking", 1),
+            bedrooms=counts("bedrooms"),
+            parking=counts("parking"),
             price_min=decimal("price_min"),
             price_max=decimal("price_max"),
+            area_min=area("area_min"),
+            area_max=area("area_max"),
             code=(params.get("code") or "").strip() or None,
             advertiser=params.get("advertiser") or None,
             ordering=ordering,
@@ -119,19 +137,24 @@ class SearchService:
             cidades = {n.city_id for n in neighborhoods}
             if city is None and len(cidades) == 1:
                 city = neighborhoods[0].city
-        property_type = PropertyType.objects.filter(slug=filters.property_type).first() if filters.property_type else None
+        property_types = []
+        if filters.property_types:
+            por_slug = {t.slug: t for t in PropertyType.objects.filter(slug__in=filters.property_types)}
+            property_types = [por_slug[s] for s in filters.property_types if s in por_slug]
         return {
             "city": city,
             "neighborhoods": neighborhoods,
             "neighborhood": neighborhoods[0] if len(neighborhoods) == 1 else None,
-            "property_type": property_type,
+            "property_types": property_types,
+            # Um único tipo alimenta o `SearchLog`, como o bairro único.
+            "property_type": property_types[0] if len(property_types) == 1 else None,
         }
 
     def base_queryset(self, filters: SearchFilters, resolved):
         """Filtros que não dependem do objetivo (usados também nos contadores das abas)."""
         qs = visible_properties(self.portal)
-        if filters.property_type:
-            qs = qs.filter(property_type=resolved["property_type"]) if resolved["property_type"] else qs.none()
+        if filters.property_types:
+            qs = qs.filter(property_type__in=resolved["property_types"]) if resolved["property_types"] else qs.none()
         if filters.city:
             qs = qs.filter(city=resolved["city"]) if resolved["city"] else qs.none()
         if filters.neighborhoods:
@@ -143,15 +166,27 @@ class SearchService:
         elif filters.condominium == "outside":
             qs = qs.filter(is_in_condominium=False)
         if filters.bedrooms:
-            cond = Q()
-            for n in filters.bedrooms:
-                cond |= Q(bedrooms__gte=4) if n >= 4 else Q(bedrooms=n)
-            qs = qs.filter(cond)
+            qs = qs.filter(self._count_condition("bedrooms", filters.bedrooms))
         if filters.parking:
-            qs = qs.filter(parking_spaces__gte=6) if filters.parking >= 6 else qs.filter(parking_spaces=filters.parking)
+            qs = qs.filter(self._count_condition("parking_spaces", filters.parking))
+        if filters.area_min is not None or filters.area_max is not None:
+            # Área total; quando o anúncio não a informa, vale a construída.
+            qs = qs.annotate(area_value=Coalesce("total_area", "built_area"))
+            if filters.area_min is not None:
+                qs = qs.filter(area_value__gte=filters.area_min)
+            if filters.area_max is not None:
+                qs = qs.filter(area_value__lte=filters.area_max)
         if filters.code:
             qs = qs.filter(reference_code__icontains=filters.code)
         return qs
+
+    @staticmethod
+    def _count_condition(campo, valores):
+        """Quartos/vagas marcados: igualdade para 1 a 3 e `>= 4` para o "4+"."""
+        cond = Q()
+        for n in valores:
+            cond |= Q(**{f"{campo}__gte": MAX_COUNT_OPTION}) if n >= MAX_COUNT_OPTION else Q(**{campo: n})
+        return cond
 
     def search(self, filters: SearchFilters):
         resolved = self.resolve(filters)

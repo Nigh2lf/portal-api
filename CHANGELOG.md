@@ -15,6 +15,10 @@ de qual versão deste boilerplate vocês saíram.
 ## [Unreleased]
 
 ### Adicionado
+- Busca pública (`GET /public/portals/{slug}/properties/`): `property_type` aceita vários slugs
+  separados por vírgula (resposta traz `applied.property_types`); `parking` aceita lista como
+  `bedrooms` (1 a 3 igualdade, 4 = quatro ou mais, valores maiores viram 4); `area_min`/`area_max`
+  filtram pela área total ou, quando o anúncio não a informa, pela construída.
 - `GET /api/v1/{users,advertisers,properties}/summary/`: contadores de total e ativos para o
   painel inicial do admin (uma consulta agregada cada, permissão `READ` da própria tela).
 
