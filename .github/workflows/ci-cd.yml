@@ -104,7 +104,10 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          if ! ssh-keyscan -T 20 -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null; then
+            echo "::error::Port 22 of the EC2 host is unreachable from this runner (${{ steps.ip.outputs.ip }}). Open it in the security group or set AWS_SECURITY_GROUP_ID (see ci-cd/README.md)."
+            exit 1
+          fi
 
       - name: Pull and deploy on the server
         run: |
