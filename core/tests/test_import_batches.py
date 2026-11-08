@@ -391,7 +391,7 @@ def test_api_active_batch_and_cancel(advertisers, admin_api, mocker):
     assert admin_api.get(f"{BASE}active/").json()["data"] is None
     detail = admin_api.get(f"{BASE}{created['id']}/").json()["data"]
     assert len(detail["runs"]) == 3 and detail["pending"] == []
-    assert admin_api.get(BASE).json()["data"][0]["id"] == created["id"]
+    assert admin_api.get(BASE).json()["data"]["results"][0]["id"] == created["id"]
 
 
 def test_api_run_imports_as_single_batch(advertisers, admin_api, mocker):
@@ -420,6 +420,78 @@ def test_api_runs_list_filters_by_batch(advertisers, admin_api):
     assert r.status_code == 200
     results = r.json()["data"]["results"]
     assert len(results) == 1 and results[0]["status"] == "SUCCESS"
+
+
+def _finished_batch(advertisers, minutes_ago, status=Status.SUCCESS):
+    """Lote concluído há ``minutes_ago`` minutos, com uma execução de 5 imóveis por anunciante."""
+    batch = batches.create_batch(advertiser_ids=[a.pk for a in advertisers])
+    created = timezone.now() - timedelta(minutes=minutes_ago)
+    XmlImportBatch.objects.filter(pk=batch.pk).update(
+        status=status, created_at=created, started_at=created, finished_at=created
+    )
+    for advertiser in advertisers:
+        _run_ok(batch, advertiser)
+    return batch
+
+
+def test_api_batches_list_is_paginated_with_property_totals(advertisers, admin_api):
+    old = _finished_batch(advertisers, 120)
+    new = _finished_batch(advertisers[:2], 10)
+    XmlImportRun.objects.filter(batch=new, advertiser=advertisers[0]).update(
+        valid_properties=3, invalid_properties=2
+    )
+
+    r = admin_api.get(f"{BASE}?page_size=1")
+
+    assert r.status_code == 200, r.content
+    data = r.json()["data"]
+    assert (data["count"], data["total_pages"], len(data["results"])) == (2, 2, 1)
+    first = data["results"][0]
+    assert first["id"] == str(new.pk)
+    assert (
+        first["total_properties"],
+        first["valid_properties"],
+        first["invalid_properties"],
+    ) == (10, 8, 2)
+    second = admin_api.get(f"{BASE}?page_size=1&page=2").json()["data"]["results"][0]
+    assert second["id"] == str(old.pk) and second["total_properties"] == 15
+
+
+def test_api_batches_list_filters(advertisers, admin_api):
+    ana, bia, _ = advertisers
+    only_ana = _finished_batch([ana], 30)
+    failed = _finished_batch([bia], 20, status=Status.FAILED)
+
+    def ids(query):
+        return [b["id"] for b in admin_api.get(f"{BASE}?{query}").json()["data"]["results"]]
+
+    assert ids(f"advertiser={ana.pk}") == [str(only_ana.pk)]
+    assert ids("search=bi") == [str(failed.pk)]
+    assert ids("status=FAILED") == [str(failed.pk)]
+    assert ids("ordering=created_at") == [str(only_ana.pk), str(failed.pk)]
+    # Filtrar por anunciante não muda a soma: o lote continua com todas as execuções.
+    assert admin_api.get(f"{BASE}?search=ana").json()["data"]["results"][0]["total_properties"] == 5
+
+
+def test_api_batch_detail_has_property_totals(advertisers, admin_api):
+    batch = _finished_batch(advertisers, 5)
+
+    detail = admin_api.get(f"{BASE}{batch.pk}/").json()["data"]
+
+    assert detail["total_properties"] == 15 and len(detail["runs"]) == 3
+
+
+def test_api_runs_without_batch(advertisers, admin_api):
+    batch = _finished_batch([advertisers[0]], 5)
+    _run_ok(None, advertisers[1])
+
+    r = admin_api.get("/api/v1/xml-import-runs/?batch__isnull=true")
+
+    results = r.json()["data"]["results"]
+    assert [x["advertiser_name"] for x in results] == ["Bia"]
+    run = XmlImportRun.objects.get(batch=batch)
+    detail = admin_api.get(f"/api/v1/xml-import-runs/{run.pk}/").json()["data"]
+    assert detail["batch"] == str(batch.pk) and detail["batch_started_at"]
 
 
 def test_api_requires_permission(advertisers, user):

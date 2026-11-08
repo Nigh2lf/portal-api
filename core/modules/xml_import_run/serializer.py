@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from core.models import Advertiser, XmlImportBatch, XmlImportError, XmlImportRun
+from core.modules.xml_import_run.filters import property_totals
 
 
 class XmlImportErrorSerializer(serializers.ModelSerializer):
@@ -33,6 +34,9 @@ class XmlImportRunListSerializer(serializers.ModelSerializer):
 
 class XmlImportRunDetailSerializer(serializers.ModelSerializer):
     advertiser_name = serializers.CharField(source="advertiser.name", read_only=True)
+    batch_started_at = serializers.DateTimeField(
+        source="batch.started_at", read_only=True, default=None
+    )
     errors = XmlImportErrorSerializer(many=True, read_only=True)
 
     class Meta:
@@ -42,6 +46,7 @@ class XmlImportRunDetailSerializer(serializers.ModelSerializer):
             "advertiser",
             "advertiser_name",
             "batch",
+            "batch_started_at",
             "status",
             "error_message",
             "started_at",
@@ -104,6 +109,9 @@ class XmlImportBatchRunSerializer(serializers.ModelSerializer):
 
 
 class XmlImportBatchSerializer(serializers.ModelSerializer):
+    """Lote com contadores de anunciantes e a soma dos imóveis das execuções (``total_properties``,
+    ``valid_properties``, ``invalid_properties``)."""
+
     created_by_name = serializers.CharField(source="created_by.name", read_only=True, default=None)
     current_advertiser_name = serializers.CharField(
         source="current_advertiser.name", read_only=True, default=None
@@ -133,6 +141,9 @@ class XmlImportBatchSerializer(serializers.ModelSerializer):
             "error_message",
             "created_at",
         )
+
+    def to_representation(self, instance):
+        return {**super().to_representation(instance), **property_totals(instance)}
 
 
 class XmlImportBatchDetailSerializer(XmlImportBatchSerializer):

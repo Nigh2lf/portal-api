@@ -7,6 +7,11 @@ from core.classes.base_viewset import BaseModelViewSet
 from core.classes.exception_handler import envelope_success
 from core.classes.permission import CustomPermissionClass
 from core.models import XmlImportBatch, XmlImportError, XmlImportRun
+from core.modules.xml_import_run.filters import (
+    XmlImportBatchFilter,
+    batch_ordering,
+    with_property_totals,
+)
 from core.modules.xml_import_run.serializer import (
     XmlImportAdvertiserSerializer,
     XmlImportBatchCreateSerializer,
@@ -30,7 +35,6 @@ from xml_import.services.batches import (
 from xml_import.services.execution import advertisers_with_xml, in_progress, start_in_background
 
 UUID_RE = r"[0-9a-fA-F-]{36}"
-RECENT_BATCHES = 20
 
 
 class ImportacaoEmAndamento(APIException):
@@ -60,12 +64,19 @@ class XmlImportRunViewSet(BaseModelViewSet):
     search_fields = ["advertiser__name"]
     filterset_fields = {
         "advertiser": ["exact"],
-        "batch": ["exact"],
+        "batch": ["exact", "isnull"],
         "status": ["exact"],
         "report_email_sent": ["exact"],
         "started_at": ["gte", "lte"],
     }
-    ordering_fields = ["started_at", "finished_at", "total_properties", "invalid_properties"]
+    ordering_fields = [
+        "advertiser__name",
+        "started_at",
+        "finished_at",
+        "total_properties",
+        "valid_properties",
+        "invalid_properties",
+    ]
     ordering = ("-started_at",)
 
     def get_serializer_class(self):
@@ -74,7 +85,7 @@ class XmlImportRunViewSet(BaseModelViewSet):
         return XmlImportRunDetailSerializer
 
     def get_queryset(self):
-        queryset = XmlImportRun.objects.select_related("advertiser")
+        queryset = XmlImportRun.objects.select_related("advertiser", "batch")
         if self.action == "list":
             return queryset
         return queryset.prefetch_related(
@@ -152,19 +163,29 @@ class XmlImportRunViewSet(BaseModelViewSet):
     @action(detail=False, methods=["get", "post"], url_path="batches")
     def batches(self, request):
         """
-        GET: os últimos lotes. POST: cria e inicia um lote em segundo plano
+        GET: lotes paginados, mais recentes primeiro. POST: cria e inicia um lote em segundo plano
+
+        Filtros do GET: `status`, `origin`, `scope`, `created_at__gte`/`__lte`, `advertiser` (UUID) e
+        `search` (nome do anunciante), os dois últimos achando os lotes em que o anunciante rodou;
+        `ordering` em `created_at`, `started_at`, `finished_at`, `total_advertisers`, `failed`.
 
         Body do POST: `{advertisers: [uuid, ...]}` ou sem `advertisers` para todos os advertisers com XML ativo.
 
         Returns:
-            GET: envelope com a lista dos lotes recentes. POST: 202 com o lote criado; 409 se algum
-            dos advertisers já estiver em um lote ativo
+            GET: envelope paginado com os lotes e a soma dos imóveis de cada um. POST: 202 com o
+            lote criado; 409 se algum dos advertisers já estiver em um lote ativo
         """
         if request.method == "GET":
-            qs = XmlImportBatch.objects.select_related("current_advertiser", "created_by").order_by(
-                "-created_at"
-            )[:RECENT_BATCHES]
-            return envelope_success(data=XmlImportBatchSerializer(qs, many=True).data)
+            qs = XmlImportBatchFilter(
+                request.query_params,
+                queryset=XmlImportBatch.objects.select_related("current_advertiser", "created_by"),
+            ).qs
+            qs = with_property_totals(qs).order_by(
+                *batch_ordering(request.query_params.get("ordering"))
+            )
+            page = self.paginate_queryset(qs)
+            data = XmlImportBatchSerializer(page, many=True).data
+            return envelope_success(data=self.get_paginated_response(data).data)
 
         serializer = XmlImportBatchCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
