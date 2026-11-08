@@ -26,7 +26,7 @@ def photo_rejection_reason(url: str) -> str:
     return f"{PHOTO_REJECTION_PREFIX}: {url}"[:200]
 
 
-def process_cover_photos(advertiser, run=None) -> dict:
+def process_cover_photos(advertiser, run=None, *, workers=3, timeout=15, progress=None) -> dict:
     """
     Gera a miniatura das capas sem miniatura do anunciante e rejeita os imóveis cuja capa falhou
 
@@ -36,6 +36,9 @@ def process_cover_photos(advertiser, run=None) -> dict:
     Args:
         advertiser: anunciante recém-importado
         run: ``XmlImportRun`` da importação (recebe um ``XmlImportError`` por imóvel rejeitado)
+        workers: downloads em paralelo
+        timeout: segundos por download
+        progress: função ``(feitas, total, ok, falhas, restante_s)`` chamada a cada 100 capas
 
     Returns:
         ``{"miniaturas": int, "rejeitados_sem_foto": [códigos]}``
@@ -47,7 +50,9 @@ def process_cover_photos(advertiser, run=None) -> dict:
         thumbnail="",
     ).select_related("property")
     failed: list = []
-    thumbnails, _ = gerar_miniaturas_capa(covers, failed=failed)
+    thumbnails, _ = gerar_miniaturas_capa(
+        covers, workers=workers, timeout=timeout, progresso=progress, failed=failed
+    )
     rejected = reject_without_cover(advertiser, failed, run)
     return {"miniaturas": thumbnails, "rejeitados_sem_foto": rejected}
 

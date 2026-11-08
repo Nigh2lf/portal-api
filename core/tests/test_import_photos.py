@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from io import BytesIO
+from contextlib import contextmanager
+from io import BytesIO, StringIO
 
 import pytest
+from django.core.management import call_command
 from django.utils import timezone
 
 from core.models import (
@@ -222,3 +224,57 @@ def test_applier_revives_property_rejected_by_photo(advertiser, fake_download):
     assert prop.deleted_at is None
     assert summary["rejeitados_sem_foto"] == []
     assert not RejectedProperty.objects.filter(property_reference_code="BAD1").exists()
+
+
+# ------------------------------------------------------------------ comando generate_cover_thumbnails
+
+
+def _fake_lock(mocker, acquired=True):
+    """Troca a trava do MySQL (GET_LOCK) por uma que devolve ``acquired``."""
+
+    @contextmanager
+    def fake(name, wait=0):
+        yield acquired
+
+    return mocker.patch("core.management.commands.generate_cover_thumbnails.lock", fake)
+
+
+def test_command_generates_thumbnails_and_rejects(advertiser, fake_download, mocker):
+    _fake_lock(mocker)
+    ok = _property(advertiser, "OK1", OK_URL)
+    broken = _property(advertiser, "BAD1", BROKEN_URL)
+
+    call_command("generate_cover_thumbnails", "--workers", "2", stdout=StringIO())
+
+    ok.refresh_from_db()
+    broken.refresh_from_db()
+    assert ok.photos.get(is_cover=True).thumbnail.name
+    assert ok.deleted_at is None
+    assert broken.deleted_at is not None
+    assert RejectedProperty.objects.get(property_reference_code="BAD1").reason.startswith(
+        PHOTO_REJECTION_PREFIX
+    )
+
+
+def test_command_no_reject_only_generates(advertiser, fake_download, mocker):
+    _fake_lock(mocker)
+    broken = _property(advertiser, "BAD1", BROKEN_URL)
+
+    call_command("generate_cover_thumbnails", "--no-reject", stdout=StringIO())
+
+    broken.refresh_from_db()
+    assert broken.deleted_at is None
+    assert not RejectedProperty.objects.exists()
+
+
+def test_command_skips_advertiser_being_imported(advertiser, fake_download, mocker):
+    _fake_lock(mocker, acquired=False)
+    broken = _property(advertiser, "BAD1", BROKEN_URL)
+    out = StringIO()
+
+    call_command("generate_cover_thumbnails", stdout=out)
+
+    broken.refresh_from_db()
+    assert broken.deleted_at is None
+    fake_download.assert_not_called()
+    assert "1 anunciantes pulados" in out.getvalue()
