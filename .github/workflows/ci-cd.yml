@@ -11,6 +11,11 @@ on:
         type: boolean
         default: false
 
+# contents: read for the checkout; id-token: write so the deploy job can assume the AWS role by OIDC.
+permissions:
+  contents: read
+  id-token: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
@@ -67,57 +72,50 @@ jobs:
         run: pytest
 
   deploy:
-    name: Deploy to EC2
+    name: Deploy to EC2 (Systems Manager)
     needs: quality
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     environment: production
     env:
-      AWS_SECURITY_GROUP_ID: ${{ secrets.AWS_SECURITY_GROUP_ID }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      APP_DIR: /home/portal-api
     steps:
-      - name: Check deploy secrets
+      - uses: actions/checkout@v4
+
+      - name: Check repository variables
         env:
-          EC2_HOST: ${{ secrets.EC2_HOST }}
-          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
         run: |
-          if [[ -z "$EC2_HOST" || -z "$EC2_SSH_KEY" ]]; then
-            echo "::error::EC2_HOST and EC2_SSH_KEY secrets are not set. Run ci-cd/set-github-secrets.sh (see ci-cd/README.md in the workspace)."
+          for name in AWS_ROLE_ARN AWS_REGION EC2_INSTANCE_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Repository variable $name is not set (Settings > Secrets and variables > Actions > Variables). See ci-cd/README.md in the workspace."
+              exit 1
+            fi
+          done
+
+      # The runner assumes the AWS role through OIDC: no AWS key stored in the repository.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Deploy through Systems Manager
+        run: |
+          # SSM runs as root on the server; every command below runs as ubuntu so the
+          # checkout keeps its owner. The checkout is updated before scripts/deploy.sh runs.
+          bash scripts/ssm-run.sh "deploy portal-api ${GITHUB_SHA::7}" <<EOF
+          set -euo pipefail
+          cd "$APP_DIR"
+          if [ -n "\$(sudo -u ubuntu -H git status --porcelain)" ]; then
+            echo "The server checkout has local changes; refusing to overwrite them:" >&2
+            sudo -u ubuntu -H git status --short >&2
             exit 1
           fi
-
-      - name: Runner public IP
-        id: ip
-        run: echo "ip=$(curl -fsS https://checkip.amazonaws.com)" >> "$GITHUB_OUTPUT"
-
-      - name: Allow runner IP on port 22 (only when AWS_SECURITY_GROUP_ID is set)
-        if: env.AWS_SECURITY_GROUP_ID != ''
-        run: |
-          aws ec2 authorize-security-group-ingress --group-id "$AWS_SECURITY_GROUP_ID" \
-            --protocol tcp --port 22 --cidr "${{ steps.ip.outputs.ip }}/32"
-          sleep 5
-
-      - name: Prepare SSH key
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          if ! ssh-keyscan -T 20 -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null; then
-            echo "::error::Port 22 of the EC2 host is unreachable from this runner (${{ steps.ip.outputs.ip }}). Open it in the security group or set AWS_SECURITY_GROUP_ID (see ci-cd/README.md)."
-            exit 1
-          fi
-
-      - name: Pull and deploy on the server
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ConnectTimeout=30 \
-            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
-            "cd /home/portal-api && git fetch origin main && git checkout -q main && git pull --ff-only origin main \
-             && COLLECTSTATIC='${{ inputs.collectstatic }}' bash scripts/deploy.sh '${{ github.sha }}'"
-
-      - name: Revoke runner IP on port 22
-        if: always() && env.AWS_SECURITY_GROUP_ID != ''
-        run: |
-          aws ec2 revoke-security-group-ingress --group-id "$AWS_SECURITY_GROUP_ID" \
-            --protocol tcp --port 22 --cidr "${{ steps.ip.outputs.ip }}/32" || true
+          sudo -u ubuntu -H git fetch --prune origin
+          sudo -u ubuntu -H git checkout -q main
+          sudo -u ubuntu -H git reset -q --hard "$GITHUB_SHA"
+          sudo -u ubuntu -H env COLLECTSTATIC='${{ inputs.collectstatic }}' bash scripts/deploy.sh "$GITHUB_SHA"
+          EOF
