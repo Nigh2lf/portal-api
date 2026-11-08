@@ -6,13 +6,21 @@ from rest_framework.throttling import ScopedRateThrottle
 
 from core.classes.base_viewset import BaseViewSet
 from core.classes.exception_handler import envelope_success
-from core.models import Advertiser, Property, PropertyContactClick, PropertyInquiry, PropertyView
+from core.models import (
+    Advertiser,
+    Property,
+    PropertyContactClick,
+    PropertyInquiry,
+    PropertyPhoto,
+    PropertyView,
+)
 from core.services.deferred_writes import defer
 from core.services.public_cache import cached
 from public.modules.portal.serializer import PublicPropertyCardSerializer
 from public.modules.property.serializer import (
     PublicContactClickSerializer,
     PublicInquirySerializer,
+    PublicPhotoSerializer,
     PublicPropertyDetailSerializer,
     PublicSearchResultSerializer,
 )
@@ -148,6 +156,32 @@ class PublicPropertyViewSet(BaseViewSet):
             return PublicPropertyCardSerializer(itens, many=True, context={"request": request}).data
 
         dados = cached("listing", montar, portal=portal.slug, item=(slug or "").lower(), params={"view": "related"})
+        return envelope_success(data=dados)
+
+    @action(detail=True, methods=["get"], url_path="photos")
+    def photos(self, request, portal_slug=None, slug=None):
+        """
+        Fotos do imóvel, capa primeiro, para passar as fotos no card da listagem
+
+        A listagem só traz a capa (carregar a galeria de todos os cards pesava na busca);
+        o site chama este endpoint quando o visitante pede a próxima foto de um card.
+
+        Returns:
+            envelope com `[{id, url, thumbnail_url, sort_order, is_cover}]`; 404 se o imóvel
+            não estiver visível no portal
+        """
+        portal = self.get_portal()
+
+        def montar():
+            prop = self._visible_property(portal, slug, visible_properties(portal).only("pk"))
+            fotos = PropertyPhoto.objects.filter(property=prop).order_by(
+                "-is_cover", "sort_order", "created_at"
+            )
+            return PublicPhotoSerializer(fotos, many=True, context={"request": request}).data
+
+        dados = cached(
+            "listing", montar, portal=portal.slug, item=(slug or "").lower(), params={"view": "photos"}
+        )
         return envelope_success(data=dados)
 
     @action(detail=False, methods=["get"], url_path="by-ids")

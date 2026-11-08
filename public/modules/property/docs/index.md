@@ -12,6 +12,7 @@ publicados no portal (ou combinados), nas cidades cobertas.
 | GET | `.../properties/` | Busca com filtros e paginação |
 | GET | `.../properties/{slug}/` | Detalhe (aceita o `reference_code` no lugar do slug) |
 | GET | `.../properties/by-ids/?ids=a,b,c` | Cards dos ids informados (favoritos), até 100 |
+| GET | `.../properties/{slug}/photos/` | Fotos do imóvel, capa primeiro (passar fotos no card) |
 | POST | `.../properties/inquiries/` | Mensagem ao anunciante do imóvel |
 | POST | `.../properties/contact-clicks/` | Clique em telefone/WhatsApp |
 
@@ -55,6 +56,14 @@ total_sale, total_rent, total_seasonal}`), `published_at`, `created_at`,
 
 `data.related[]`: até 6 cards do mesmo tipo e cidade, preço mais próximo.
 `data.related_links[]`: `{purpose, property_type, city, neighborhood|null}`.
+
+## GET .../properties/{slug}/photos/
+
+Fotos do imóvel para o card da listagem passar as fotos: a busca só traz a capa,
+e o site chama este endpoint quando o visitante pede a próxima foto de um card.
+Aceita o `reference_code` no lugar do slug. `data[]`: `{id, url, thumbnail_url,
+sort_order, is_cover}`, capa primeiro e depois pela ordem. Cache no escopo
+`listing`. `404` se o imóvel não estiver visível no portal.
 
 ## POST .../properties/inquiries/
 
