@@ -46,8 +46,13 @@ fi
 
 # cron reads /etc/cron.d by itself (it checks the files every minute); no reload needed.
 # The file must be owned by root and not group/other writable, or cron ignores it.
+# Without the cron package the jobs would silently never run: warn in the Actions log, keep deploying.
 echo "==> cron jobs (/etc/cron.d/portal-api)"
-sudo -n install -o root -g root -m 0644 scripts/cron/portal-api.cron /etc/cron.d/portal-api
+if [[ -d /etc/cron.d ]]; then
+  sudo -n install -o root -g root -m 0644 scripts/cron/portal-api.cron /etc/cron.d/portal-api
+else
+  echo "::warning::/etc/cron.d not found (is cron installed? sudo apt install cron); cron jobs not installed"
+fi
 
 echo "==> restart $SERVICE"
 sudo -n systemctl restart "$SERVICE"
