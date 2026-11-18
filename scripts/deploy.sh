@@ -44,6 +44,11 @@ else
   echo "==> collectstatic skipped (requirements.txt unchanged)"
 fi
 
+# cron reads /etc/cron.d by itself (it checks the files every minute); no reload needed.
+# The file must be owned by root and not group/other writable, or cron ignores it.
+echo "==> cron jobs (/etc/cron.d/portal-api)"
+sudo -n install -o root -g root -m 0644 scripts/cron/portal-api.cron /etc/cron.d/portal-api
+
 echo "==> restart $SERVICE"
 sudo -n systemctl restart "$SERVICE"
 

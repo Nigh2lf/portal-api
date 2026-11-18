@@ -72,7 +72,7 @@ ao modelo de threads (só para depurar). O log de cada anunciante no lote traz
 
 - **Janela noturna:** não há agendador no serviço web (removido em 2026-10-09). Para
   importar toda noite, agende por fora `python manage.py import_xml --window --origin cron`
-  (ex.: serviço *Cron Schedule* do Railway no mesmo repo). Não inicia anunciante depois de
+  (uma linha em `scripts/cron/portal-api.cron`, ver `docs/deploy.md`). Não inicia anunciante depois de
   `XML_IMPORT_WINDOW_END` (03:00); quem ficou de fora vai primeiro na noite seguinte.
   `GET_LOCK` do MySQL garante uma execução só.
 - **Admin:** tela "Importações XML" → "Importar agora" (todos os anunciantes ou os

@@ -1,0 +1,11 @@
+# Cron jobs of portal-api. scripts/deploy.sh installs this file as /etc/cron.d/portal-api on every
+# deploy: edit it here, never on the server. Times are the server's clock (timedatectl).
+# Each call is cut at 20 minutes (1200 s). Logs: journalctl -t portal-cron
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+
+# m h dom mon dow user   command
+0 1 * * * ubuntu bash /home/portal-api/scripts/cron/call-url.sh salvar-todos-xml 'https://petropolisimoveis.com/xml/salvartodosxml.php?ModoTeste=1' 1200
+0 2 * * * ubuntu bash /home/portal-api/scripts/cron/call-url.sh salvar-todos-xml-local 'https://petropolisimoveis.com/xml/salvartodosxmllocal.php?ModoTeste=1' 1200
+0 3 * * * ubuntu bash /home/portal-api/scripts/cron/call-url.sh importar-xml 'https://petropolisimoveis.com/xml/importarxml.php?t=123' 1200

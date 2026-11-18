@@ -123,8 +123,32 @@ tem TOTPDevice **Confirmed** cadastrado (ver [auth-permissions.md](auth-permissi
 ## Tarefas agendadas
 
 O serviço web não agenda nada (o APScheduler interno foi removido em 2026-10-09
-para o processo ficar menor). O que antes era job vira comando, rodado à mão ou
-por um agendador externo, como um serviço *Cron Schedule* do Railway no mesmo repo:
+para o processo ficar menor). O agendamento é o cron do próprio EC2, versionado em
+[scripts/cron/portal-api.cron](../scripts/cron/portal-api.cron): o `scripts/deploy.sh`
+instala esse arquivo como `/etc/cron.d/portal-api` a cada deploy (dono root, modo 0644,
+o cron relê sozinho). Altere sempre o arquivo do repo, nunca o do servidor.
+
+Jobs ativos (horário do relógio do servidor, ver `timedatectl`):
+
+| Hora | Nome | O que chama |
+|---|---|---|
+| 01:00 | `salvar-todos-xml` | `https://petropolisimoveis.com/xml/salvartodosxml.php?ModoTeste=1` |
+| 02:00 | `salvar-todos-xml-local` | `https://petropolisimoveis.com/xml/salvartodosxmllocal.php?ModoTeste=1` |
+| 03:00 | `importar-xml` | `https://petropolisimoveis.com/xml/importarxml.php?t=123` |
+
+Cada job roda [scripts/cron/call-url.sh](../scripts/cron/call-url.sh), que faz um GET
+com `curl --max-time 1200`: a chamada é cortada em 20 minutos (o script PHP remoto pode
+continuar rodando do lado de lá). Início e resultado (`OK HTTP 200 in 312s`, `TIMEOUT
+after 1200s`, `FAILED HTTP 500`) vão para o journal:
+
+```bash
+journalctl -t portal-cron --since today        # resultado dos jobs
+journalctl -u cron --since today               # o cron disparou?
+bash scripts/cron/call-url.sh teste 'https://…' 60   # rodar um job à mão (como ubuntu)
+```
+
+Os comandos Django que antes eram jobs **não** estão agendados; rode à mão ou inclua
+uma linha no `portal-api.cron` (sempre como `ubuntu`, nunca root):
 
 - `python manage.py import_xml --window --origin cron`: importação XML da janela noturna.
 - `python manage.py purge_logs`: apaga `LogRequest`, `LogModelChange` e `SearchLog` antigos.

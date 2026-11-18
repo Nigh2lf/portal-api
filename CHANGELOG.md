@@ -15,6 +15,11 @@ de qual versão deste boilerplate vocês saíram.
 ## [Unreleased]
 
 ### Adicionado
+- Cron do EC2 versionado em `scripts/cron/portal-api.cron` e instalado pelo `scripts/deploy.sh`
+  como `/etc/cron.d/portal-api`: às 01:00, 02:00 e 03:00 (relógio do servidor) chama
+  `salvartodosxml.php`, `salvartodosxmllocal.php` e `importarxml.php` do petropolisimoveis.com
+  por `scripts/cron/call-url.sh`, com limite de 20 minutos por chamada e log em
+  `journalctl -t portal-cron`.
 - Busca pública (`GET /public/portals/{slug}/properties/`): `property_type` aceita vários slugs
   separados por vírgula (resposta traz `applied.property_types`); `parking` aceita lista como
   `bedrooms` (1 a 3 igualdade, 4 = quatro ou mais, valores maiores viram 4); `area_min`/`area_max`
